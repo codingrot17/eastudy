@@ -1,0 +1,21 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    body {
+        @apply bg-white text-slate-900 font-sans transition-colors duration-300;
+    }
+
+    html.dark body {
+        @apply bg-slate-950 text-slate-100;
+    }
+}
+
+@layer utilities {
+    .gradient-text {
+        @apply bg-gradient-to-r from-primary-700 to-accent-500 bg-clip-text text-transparent;
+    }
+}
