@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { BookOpen, Menu, X } from "lucide-react";
 import ThemeToggle from "../ui/ThemeToggle";
 import Button from "../ui/Button";
@@ -17,7 +18,7 @@ export default function Navbar() {
 
     const scrollTo = id => {
         document
-            .getElementById(id.toLowerCase().replace(" ", "-"))
+            .getElementById(id.toLowerCase().replace(/\s+/g, "-"))
             ?.scrollIntoView({ behavior: "smooth" });
         setMenuOpen(false);
     };
@@ -32,16 +33,16 @@ export default function Navbar() {
         >
             <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
                 {/* Logo */}
-                <div className="flex items-center gap-2">
+                <Link to="/" className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-primary-700 rounded-lg flex items-center justify-center">
                         <BookOpen size={16} className="text-white" />
                     </div>
                     <span className="text-xl font-bold text-slate-900 dark:text-white">
                         Eastudy
                     </span>
-                </div>
+                </Link>
 
-                {/* Desktop Links */}
+                {/* Desktop Nav Links */}
                 <div className="hidden md:flex items-center gap-8">
                     {links.map(link => (
                         <button
@@ -56,7 +57,19 @@ export default function Navbar() {
 
                 {/* Right Side */}
                 <div className="flex items-center gap-3">
+                    <Link
+                        to="/auth/login"
+                        className="hidden md:inline-flex text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary-700 dark:hover:text-primary-400 transition-colors"
+                    >
+                        Sign In
+                    </Link>
                     <ThemeToggle />
+                    <Link
+                        to="/auth/rep/signup"
+                        className="hidden md:inline-flex text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary-700 dark:hover:text-primary-400 transition-colors"
+                    >
+                        Rep Sign Up
+                    </Link>
                     <Button
                         size="sm"
                         className="hidden md:inline-flex"
@@ -65,7 +78,7 @@ export default function Navbar() {
                         Join Waitlist
                     </Button>
 
-                    {/* Mobile Menu Button */}
+                    {/* Mobile menu toggle */}
                     <button
                         className="md:hidden p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                         onClick={() => setMenuOpen(!menuOpen)}
@@ -87,6 +100,20 @@ export default function Navbar() {
                             {link}
                         </button>
                     ))}
+                    <Link
+                        to="/auth/login"
+                        onClick={() => setMenuOpen(false)}
+                        className="text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-primary-700 dark:hover:text-primary-400 transition-colors py-2"
+                    >
+                        Sign In
+                    </Link>
+                    <Link
+                        to="/auth/rep/signup"
+                        onClick={() => setMenuOpen(false)}
+                        className="text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-primary-700 dark:hover:text-primary-400 transition-colors py-2"
+                    >
+                        Rep Sign Up
+                    </Link>
                     <Button onClick={() => scrollTo("Waitlist")}>
                         Join Waitlist
                     </Button>

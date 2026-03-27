@@ -9,3 +9,6 @@ export const databases = new Databases(client);
 
 export const DB_ID = import.meta.env.VITE_APPWRITE_DATABASE_ID;
 export const WAITLIST_ID = import.meta.env.VITE_APPWRITE_WAITLIST_COLLECTION_ID;
+export const USERS_ID = import.meta.env.VITE_APPWRITE_USERS_COLLECTION_ID;
+export const DEPARTMENTS_ID = import.meta.env
+    .VITE_APPWRITE_DEPARTMENTS_COLLECTION_ID;
