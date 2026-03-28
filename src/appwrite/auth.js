@@ -10,10 +10,17 @@ export const createAccount = async (name, email, password) => {
 };
 
 export const loginEmail = async (email, password) => {
+    try {
+        // Delete existing session first if any
+        await account.deleteSession("current");
+    } catch {}
     return await account.createEmailPasswordSession(email, password);
 };
 
-export const loginGoogle = () => {
+export const loginGoogle = async () => {
+    try {
+        await account.deleteSession("current");
+    } catch (e) {}
     account.createOAuth2Session(
         OAuthProvider.Google,
         `${window.location.origin}/auth/callback`,
