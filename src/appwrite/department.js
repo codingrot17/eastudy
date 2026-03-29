@@ -95,3 +95,17 @@ export const getDepartmentByRepId = async repId => {
     ]);
     return res.total > 0 ? res.documents[0] : null;
 };
+// ── Get Department by code ─────────────────────
+
+export const getDepartmentByCode = async code => {
+    const res = await databases.listDocuments(DB_ID, DEPARTMENTS_ID, [
+        Query.equal("code", code.toUpperCase().trim())
+    ]);
+
+    return res.total > 0 ? res.documents[0] : null;
+};
+
+// ── Get Department by ID ─────────────────────
+export const getDepartmentById = async id => {
+    return await databases.getDocument(DB_ID, DEPARTMENTS_ID, id);
+};

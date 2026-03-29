@@ -64,12 +64,20 @@ export default function Navbar() {
                         Sign In
                     </Link>
                     <ThemeToggle />
-                    <Link
-                        to="/auth/rep/signup"
-                        className="hidden md:inline-flex text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary-700 dark:hover:text-primary-400 transition-colors"
-                    >
-                        Rep Sign Up
-                    </Link>
+                    <div className="hidden md:flex items-center gap-2">
+                        <Link
+                            to="/auth/rep/signup"
+                            className="text-sm font-medium px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                        >
+                            Rep Sign Up
+                        </Link>
+                        <Link
+                            to="/auth/student/signup"
+                            className="text-sm font-medium px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                        >
+                            Student Sign Up
+                        </Link>
+                    </div>
                     <Button
                         size="sm"
                         className="hidden md:inline-flex"
@@ -78,7 +86,7 @@ export default function Navbar() {
                         Join Waitlist
                     </Button>
 
-                    {/* Mobile menu toggle */}
+                    {/* Mobile Menu Toggle */}
                     <button
                         className="md:hidden p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                         onClick={() => setMenuOpen(!menuOpen)}
@@ -90,12 +98,12 @@ export default function Navbar() {
 
             {/* Mobile Menu */}
             {menuOpen && (
-                <div className="md:hidden bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex flex-col gap-4">
+                <div className="md:hidden bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex flex-col gap-3">
                     {links.map(link => (
                         <button
                             key={link}
                             onClick={() => scrollTo(link)}
-                            className="text-left text-slate-700 dark:text-slate-300 font-medium py-2"
+                            className="text-left text-slate-700 dark:text-slate-300 font-medium py-2 border-b border-slate-100 dark:border-slate-800"
                         >
                             {link}
                         </button>
@@ -114,7 +122,20 @@ export default function Navbar() {
                     >
                         Rep Sign Up
                     </Link>
-                    <Button onClick={() => scrollTo("Waitlist")}>
+                    <Link
+                        to="/auth/student/signup"
+                        onClick={() => setMenuOpen(false)}
+                        className="text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-primary-700 dark:hover:text-primary-400 transition-colors py-2"
+                    >
+                        Student Sign Up
+                    </Link>
+                    <Button
+                        className="mt-2"
+                        onClick={() => {
+                            scrollTo("Waitlist");
+                            setMenuOpen(false);
+                        }}
+                    >
                         Join Waitlist
                     </Button>
                 </div>

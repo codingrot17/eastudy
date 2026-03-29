@@ -1,16 +1,17 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { getCurrentUser } from "../../appwrite/auth";
 import {
     getUserProfile,
-    getDepartmentByRepId,
-    createUserProfile
+    getDepartmentByRepId
 } from "../../appwrite/department";
 import useAuthStore from "../../store/useAuthStore";
 
 export default function AuthCallback() {
     const navigate = useNavigate();
     const { setAuth } = useAuthStore();
+    const [searchParams] = useSearchParams();
+    const type = searchParams.get("type"); // 'student' | null (rep)
 
     useEffect(() => {
         const handle = async () => {
@@ -21,12 +22,15 @@ export default function AuthCallback() {
                     return;
                 }
 
-                let profile = await getUserProfile(user.$id);
+                const profile = await getUserProfile(user.$id);
 
                 if (!profile) {
-                    // New Google user — send to complete rep signup
-                    // (student flow will have its own OAuth callback later)
-                    navigate("/auth/rep/signup?oauth=true");
+                    // New Google user — route by type
+                    if (type === "student") {
+                        navigate("/auth/student/signup?oauth=true");
+                    } else {
+                        navigate("/auth/rep/signup?oauth=true");
+                    }
                     return;
                 }
 
@@ -37,8 +41,6 @@ export default function AuthCallback() {
                 }
 
                 setAuth(user, profile, department);
-
-                // Existing user — route by role
                 navigate(`/dashboard/${profile.role}`);
             } catch {
                 navigate("/auth/login");

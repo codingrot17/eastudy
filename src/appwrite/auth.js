@@ -20,10 +20,24 @@ export const loginEmail = async (email, password) => {
 export const loginGoogle = async () => {
     try {
         await account.deleteSession("current");
-    } catch (e) {}
+    } catch {}
     account.createOAuth2Session(
         OAuthProvider.Google,
         `${window.location.origin}/auth/callback`,
+        `${window.location.origin}/auth/failure`
+    );
+};
+
+export const loginGoogleAsStudent = async () => {
+    try {
+        await account.deleteSession("current");
+    } catch {
+        /* no session */
+    }
+
+    account.createOAuth2Session(
+        OAuthProvider.Google,
+        `${window.location.origin}/auth/callback?type=student`,
         `${window.location.origin}/auth/failure`
     );
 };
