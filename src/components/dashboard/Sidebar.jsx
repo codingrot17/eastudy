@@ -87,7 +87,7 @@ export default function Sidebar({
             </nav>
 
             {/* Dept Code Widget */}
-            {department?.code && (
+            {role === "rep" && department?.code && (
                 <div className="mx-3 mb-3 bg-white/8 rounded-xl p-4 border border-white/10">
                     <p className="text-xs text-indigo-300 uppercase tracking-widest mb-2 font-medium">
                         Class Code
