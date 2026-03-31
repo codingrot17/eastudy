@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { client_ } from "../appwrite/config";
+import { client} from "../appwrite/config";
 import {
     getAnnouncements,
     createAnnouncement,
@@ -36,7 +36,7 @@ export function useAnnouncements(departmentId) {
 
         // Subscribe to changes in this collection
         const channel = `databases.${DB_ID}.collections.${ANNOUNCEMENTS_ID}.documents`;
-        const unsubscribe = client_.subscribe(channel, event => {
+        const unsubscribe = client.subscribe(channel, event => {
             const doc = event.payload;
 
             // Only handle events for this department
