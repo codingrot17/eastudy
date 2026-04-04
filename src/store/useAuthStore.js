@@ -26,16 +26,19 @@ const useAuthStore = create(
                     const profile = await getUserProfile(user.$id);
                     let department = null;
 
-                    if (
-                        profile?.role === "rep" ||
-                        profile?.role === "assistant"
-                    ) {
+                    if (profile?.role === "rep") {
                         department = await getDepartmentByRepId(user.$id);
+                    } else if (profile?.role === "assistant") {
+                        // Assistant reps load dept by departmentId on their profile
+                        const { getDepartmentById } =
+                            await import("../appwrite/department");
+                        department = await getDepartmentById(
+                            profile.departmentId
+                        );
                     } else if (
                         profile?.role === "student" &&
                         profile?.departmentId
                     ) {
-                        // Students load dept by ID
                         const { getDepartmentById } =
                             await import("../appwrite/department");
                         department = await getDepartmentById(

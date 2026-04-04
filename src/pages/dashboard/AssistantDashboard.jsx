@@ -4,7 +4,7 @@ import AnnouncementsTab from "./tabs/AnnouncementsTab";
 import ScheduleTab from "./tabs/ScheduleTab";
 import MaterialsTab from "./tabs/MaterialsTab";
 import MoreTab from "./tabs/MoreTab";
-import SettingsTab from "./tabs/SettingsTab";
+import AssistantSettingsTab from "./tabs/AssistantSettingsTab";
 
 const tabs = {
     home: HomeTab,
@@ -15,9 +15,9 @@ const tabs = {
     quizzes: MoreTab,
     "group-study": MoreTab,
     "study-plans": MoreTab,
-    settings: SettingsTab
+    settings: AssistantSettingsTab
 };
 
-export default function RepDashboard() {
-    return <DashboardLayout role="rep" tabs={tabs} defaultTab="home" />;
+export default function AssistantDashboard() {
+    return <DashboardLayout role="assistant" tabs={tabs} defaultTab="home" />;
 }

@@ -8,6 +8,7 @@ import StudentSignup from "./pages/auth/StudentSignup";
 import Login from "./pages/auth/Login";
 import AuthCallback from "./pages/auth/AuthCallback";
 import RepDashboard from "./pages/dashboard/RepDashboard";
+import AssistantDashboard from "./pages/dashboard/AssistantDashboard";
 import StudentDashboard from "./pages/dashboard/StudentDashboard";
 import ProtectedRoute from "./routes/ProtectedRoute";
 
@@ -43,6 +44,14 @@ export default function App() {
                 element={
                     <ProtectedRoute role="student">
                         <StudentDashboard />
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/dashboard/assistant"
+                element={
+                    <ProtectedRoute role="assistant">
+                        <AssistantDashboard />
                     </ProtectedRoute>
                 }
             />

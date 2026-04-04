@@ -44,11 +44,14 @@ export default function Login() {
             // Load department if rep
             let department = null;
             if (profile.role === "rep" || profile.role === "assistant") {
-                const { getDepartmentByRepId } =
+                const { getDepartmentById } =
                     await import("../../appwrite/department");
-                department = await getDepartmentByRepId(user.$id);
+                department =
+                    profile.role === "rep"
+                        ? await getDepartmentByRepId(user.$id)
+                        : await getDepartmentById(profile.departmentId);
             }
-
+            
             setAuth(user, profile, department);
             navigate(`/dashboard/${profile.role}`);
         } catch (err) {
