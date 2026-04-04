@@ -3,7 +3,11 @@ import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { BookOpen, Loader2 } from "lucide-react";
 import { loginEmail, loginGoogle, getCurrentUser } from "../../appwrite/auth";
-import { getUserProfile } from "../../appwrite/department";
+import {
+    getUserProfile,
+    getDepartmentByRepId,
+    getDepartmentById
+} from "../../appwrite/department";
 import useAuthStore from "../../store/useAuthStore";
 import ThemeToggle from "../../components/ui/ThemeToggle";
 import Button from "../../components/ui/Button";
@@ -51,7 +55,7 @@ export default function Login() {
                         ? await getDepartmentByRepId(user.$id)
                         : await getDepartmentById(profile.departmentId);
             }
-            
+
             setAuth(user, profile, department);
             navigate(`/dashboard/${profile.role}`);
         } catch (err) {
