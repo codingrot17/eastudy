@@ -19,11 +19,11 @@ const randomSuffix = (len = 4) => {
 };
 
 export const generateCode = (school, dept, level) => {
-    const schoolAbbr = abbreviate(school); // e.g. LASU
-    const deptAbbr = abbreviate(dept); // e.g. CS
-    const lvl = level.replace("L", ""); // e.g. 300
-    const suffix = randomSuffix(4); // e.g. X7K2
-    return `${schoolAbbr}-${deptAbbr}${lvl}-${suffix}`; // LASU-CS300-X7K2
+    const schoolAbbr = abbreviate(school);
+    const deptAbbr = abbreviate(dept);
+    const lvl = level.replace("L", "");
+    const suffix = randomSuffix(4);
+    return `${schoolAbbr}-${deptAbbr}${lvl}-${suffix}`;
 };
 
 // ── Check Duplicate Department ──────────────────
@@ -95,17 +95,18 @@ export const getDepartmentByRepId = async repId => {
     ]);
     return res.total > 0 ? res.documents[0] : null;
 };
-// ── Get Department by code ─────────────────────
+
+// ── Get Department by code ──────────────────────
 
 export const getDepartmentByCode = async code => {
     const res = await databases.listDocuments(DB_ID, DEPARTMENTS_ID, [
         Query.equal("code", code.toUpperCase().trim())
     ]);
-
     return res.total > 0 ? res.documents[0] : null;
 };
 
-// ── Get Department by ID ─────────────────────
+// ── Get Department by ID ────────────────────────
+
 export const getDepartmentById = async id => {
     return await databases.getDocument(DB_ID, DEPARTMENTS_ID, id);
 };
@@ -123,50 +124,56 @@ export const getDepartmentStudents = async departmentId => {
 
 // ── Assign assistant rep ────────────────────────
 
-export const assignAssistantRep = async (userId, departmentId) => {
-    // Update user role to assistant
+export const assignAssistantRep = async (userAuthId, departmentId) => {
+    // 1. Find the user doc by authId
     const userRes = await databases.listDocuments(DB_ID, USERS_ID, [
-        Query.equal("authId", userId)
+        Query.equal("authId", userAuthId)
     ]);
     if (userRes.total === 0) throw new Error("User not found");
 
     const userDoc = userRes.documents[0];
+
+    // 2. Promote user to assistant + set their departmentId
     await databases.updateDocument(DB_ID, USERS_ID, userDoc.$id, {
-        role: "assistant"
+        role: "assistant",
+        departmentId: departmentId
     });
 
-    // Update department with assistantRepId
-    const deptRes = await databases.listDocuments(DB_ID, DEPARTMENTS_ID, [
-        Query.equal("$id", departmentId)
-    ]);
-    if (deptRes.total === 0) throw new Error("Department not found");
+    // 3. Update department with assistantRepId — use getDocument first to confirm it exists
+    const dept = await databases.getDocument(
+        DB_ID,
+        DEPARTMENTS_ID,
+        departmentId
+    );
 
-    return await databases.updateDocument(DB_ID, DEPARTMENTS_ID, departmentId, {
-        assistantRepId: userId
+    return await databases.updateDocument(DB_ID, DEPARTMENTS_ID, dept.$id, {
+        assistantRepId: userAuthId
     });
 };
 
 // ── Remove assistant rep ────────────────────────
 
-export const removeAssistantRep = async (userId, departmentId) => {
-    // Demote back to student
+export const removeAssistantRep = async (userAuthId, departmentId) => {
+    // 1. Find the user doc
     const userRes = await databases.listDocuments(DB_ID, USERS_ID, [
-        Query.equal("authId", userId)
+        Query.equal("authId", userAuthId)
     ]);
     if (userRes.total === 0) throw new Error("User not found");
 
     const userDoc = userRes.documents[0];
+
+    // 2. Demote back to student (keep departmentId so they stay in the class)
     await databases.updateDocument(DB_ID, USERS_ID, userDoc.$id, {
         role: "student"
     });
 
-    // Remove from department
+    // 3. Remove assistantRepId from department
     return await databases.updateDocument(DB_ID, DEPARTMENTS_ID, departmentId, {
         assistantRepId: null
     });
 };
 
-// ── Get user profile by authId (for assistant lookup) ──
+// ── Get user by email ───────────────────────────
 
 export const getUserByEmail = async email => {
     const res = await databases.listDocuments(DB_ID, USERS_ID, [
@@ -175,7 +182,7 @@ export const getUserByEmail = async email => {
     return res.total > 0 ? res.documents[0] : null;
 };
 
-// ── Get department assistant ────────────────────
+// ── Get assistant profile ───────────────────────
 
 export const getAssistantProfile = async assistantRepId => {
     if (!assistantRepId) return null;
