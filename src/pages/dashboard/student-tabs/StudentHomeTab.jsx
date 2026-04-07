@@ -4,9 +4,9 @@ import {
     CalendarDays,
     ClipboardList,
     ArrowRight,
-    BookOpen,
     GraduationCap
 } from "lucide-react";
+import { useDashboardStats } from "../../../hooks/useDashboardStats";
 
 export default function StudentHomeTab({
     user,
@@ -14,34 +14,40 @@ export default function StudentHomeTab({
     department,
     onTabChange
 }) {
-    const stats = [
+    const { stats, loading: statsLoading } = useDashboardStats(department?.$id);
+
+    const statCards = [
         {
             label: "Announcements",
-            value: "0",
+            value: stats.announcements,
             icon: Megaphone,
             color: "text-indigo-500",
-            bg: "bg-indigo-50 dark:bg-indigo-900/20"
+            bg: "bg-indigo-50 dark:bg-indigo-900/20",
+            tab: "announcements"
         },
         {
             label: "Materials",
-            value: "0",
+            value: stats.materials,
             icon: FolderOpen,
             color: "text-violet-500",
-            bg: "bg-violet-50 dark:bg-violet-900/20"
+            bg: "bg-violet-50 dark:bg-violet-900/20",
+            tab: "materials"
         },
         {
             label: "Classes Today",
-            value: "0",
+            value: stats.classesToday,
             icon: CalendarDays,
             color: "text-cyan-500",
-            bg: "bg-cyan-50 dark:bg-cyan-900/20"
+            bg: "bg-cyan-50 dark:bg-cyan-900/20",
+            tab: "schedule"
         },
         {
             label: "Quizzes",
-            value: "0",
+            value: stats.quizzes,
             icon: ClipboardList,
             color: "text-amber-500",
-            bg: "bg-amber-50 dark:bg-amber-900/20"
+            bg: "bg-amber-50 dark:bg-amber-900/20",
+            tab: null
         }
     ];
 
@@ -91,7 +97,6 @@ export default function StudentHomeTab({
                         )}
                     </div>
 
-                    {/* Dept Info Widget */}
                     <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 shrink-0 flex flex-col gap-1">
                         <div className="flex items-center gap-2 text-cyan-400">
                             <GraduationCap size={16} />
@@ -111,24 +116,38 @@ export default function StudentHomeTab({
 
             {/* Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {stats.map(({ label, value, icon: Icon, color, bg }) => (
-                    <div
-                        key={label}
-                        className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 flex flex-col gap-3"
-                    >
-                        <div
-                            className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center`}
+                {statCards.map(
+                    ({ label, value, icon: Icon, color, bg, tab }) => (
+                        <button
+                            key={label}
+                            onClick={() => tab && onTabChange(tab)}
+                            disabled={!tab}
+                            className={`bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 flex flex-col gap-3 text-left transition-all ${
+                                tab
+                                    ? "hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-sm cursor-pointer"
+                                    : "cursor-default"
+                            }`}
                         >
-                            <Icon size={20} className={color} />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-extrabold">{value}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                {label}
-                            </p>
-                        </div>
-                    </div>
-                ))}
+                            <div
+                                className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center`}
+                            >
+                                <Icon size={20} className={color} />
+                            </div>
+                            <div>
+                                {statsLoading ? (
+                                    <div className="h-7 w-10 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse mb-1" />
+                                ) : (
+                                    <p className="text-2xl font-extrabold">
+                                        {value}
+                                    </p>
+                                )}
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                    {label}
+                                </p>
+                            </div>
+                        </button>
+                    )
+                )}
             </div>
 
             {/* Quick Access */}
@@ -148,20 +167,47 @@ export default function StudentHomeTab({
                 </div>
             </div>
 
-            {/* Latest Activity Placeholder */}
+            {/* Today preview */}
             <div>
-                <h2 className="font-bold text-lg mb-4">Latest Updates</h2>
-                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-8 flex flex-col items-center gap-3 text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
-                        <Megaphone size={20} className="text-indigo-500" />
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-bold text-lg">Today</h2>
+                    <button
+                        onClick={() => onTabChange("schedule")}
+                        className="text-sm text-primary-700 dark:text-primary-400 font-semibold hover:underline"
+                    >
+                        Full schedule →
+                    </button>
+                </div>
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-cyan-50 dark:bg-cyan-900/20 flex items-center justify-center shrink-0">
+                        <CalendarDays size={22} className="text-cyan-500" />
                     </div>
-                    <p className="font-semibold text-slate-500 dark:text-slate-400 text-sm">
-                        No updates yet
-                    </p>
-                    <p className="text-xs text-slate-400 max-w-xs">
-                        Your class rep hasn't posted anything yet. Check back
-                        soon.
-                    </p>
+                    <div className="flex-1">
+                        {statsLoading ? (
+                            <div className="h-4 w-32 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+                        ) : (
+                            <>
+                                <p className="font-bold text-sm">
+                                    {stats.classesToday === 0
+                                        ? "No classes today"
+                                        : `${stats.classesToday} class${stats.classesToday !== 1 ? "es" : ""} today`}
+                                </p>
+                                <p className="text-xs text-slate-400 mt-0.5">
+                                    {new Date().toLocaleDateString("en-US", {
+                                        weekday: "long",
+                                        month: "long",
+                                        day: "numeric"
+                                    })}
+                                </p>
+                            </>
+                        )}
+                    </div>
+                    <button
+                        onClick={() => onTabChange("schedule")}
+                        className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    >
+                        <ArrowRight size={16} />
+                    </button>
                 </div>
             </div>
         </div>
