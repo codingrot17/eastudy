@@ -4,7 +4,6 @@ import { Query } from "appwrite";
 
 const ANNOUNCEMENTS_ID = import.meta.env
     .VITE_APPWRITE_ANNOUNCEMENTS_COLLECTION_ID;
-const MATERIALS_ID = import.meta.env.VITE_APPWRITE_MATERIALS_COLLECTION_ID;
 const SCHEDULES_ID = import.meta.env.VITE_APPWRITE_SCHEDULES_COLLECTION_ID;
 
 export function useDashboardStats(departmentId) {
@@ -17,7 +16,10 @@ export function useDashboardStats(departmentId) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!departmentId) return;
+        if (!departmentId) {
+            setLoading(false);
+            return;
+        }
 
         const load = async () => {
             setLoading(true);
@@ -26,13 +28,9 @@ export function useDashboardStats(departmentId) {
                     weekday: "long"
                 });
 
-                const [announcementsRes, materialsRes, schedulesTodayRes] =
-                    await Promise.all([
+                const [announcementsRes, schedulesTodayRes] = await Promise.all(
+                    [
                         databases.listDocuments(DB_ID, ANNOUNCEMENTS_ID, [
-                            Query.equal("departmentId", departmentId),
-                            Query.limit(1)
-                        ]),
-                        databases.listDocuments(DB_ID, MATERIALS_ID, [
                             Query.equal("departmentId", departmentId),
                             Query.limit(1)
                         ]),
@@ -41,16 +39,16 @@ export function useDashboardStats(departmentId) {
                             Query.equal("day", todayName),
                             Query.limit(25)
                         ])
-                    ]);
+                    ]
+                );
 
-                setStats({
+                setStats(prev => ({
+                    ...prev,
                     announcements: announcementsRes.total,
-                    materials: materialsRes.total,
-                    classesToday: schedulesTodayRes.total,
-                    quizzes: 0 // placeholder until quizzes are built
-                });
-            } catch {
-                // fail silently — stats are non-critical
+                    classesToday: schedulesTodayRes.total
+                }));
+            } catch (err) {
+                console.warn("useDashboardStats error:", err?.message);
             } finally {
                 setLoading(false);
             }
