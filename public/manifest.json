@@ -1,12 +1,16 @@
 {
-    "name": "Eastudy",
+    "name": "Eastudy — University Learning Platform",
     "short_name": "Eastudy",
-    "description": "Your university learning platform",
+    "description": "Your class schedule, announcements, and materials — all in one place.",
     "start_url": "/",
+    "scope": "/",
     "display": "standalone",
+    "display_override": ["window-controls-overlay", "standalone"],
     "background_color": "#ffffff",
     "theme_color": "#3B35C4",
-    "orientation": "portrait",
+    "orientation": "portrait-primary",
+    "categories": ["education", "productivity"],
+    "lang": "en",
     "icons": [
         {
             "src": "/favicon.svg",
@@ -14,5 +18,53 @@
             "type": "image/svg+xml",
             "purpose": "any maskable"
         }
-    ]
+    ],
+    "shortcuts": [
+        {
+            "name": "Announcements",
+            "short_name": "Updates",
+            "description": "View latest class announcements",
+            "url": "/?tab=announcements",
+            "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+        },
+        {
+            "name": "Schedule",
+            "short_name": "Schedule",
+            "description": "View today's class schedule",
+            "url": "/?tab=schedule",
+            "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+        },
+        {
+            "name": "Materials",
+            "short_name": "Materials",
+            "description": "Access study materials",
+            "url": "/?tab=materials",
+            "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+        }
+    ],
+    "share_target": {
+        "action": "/share",
+        "method": "POST",
+        "enctype": "multipart/form-data",
+        "params": {
+            "title": "title",
+            "text": "text",
+            "url": "url",
+            "files": [
+                {
+                    "name": "files",
+                    "accept": [
+                        "application/pdf",
+                        "image/*",
+                        ".doc",
+                        ".docx",
+                        ".ppt",
+                        ".pptx"
+                    ]
+                }
+            ]
+        }
+    },
+    "prefer_related_applications": false,
+    "related_applications": []
 }

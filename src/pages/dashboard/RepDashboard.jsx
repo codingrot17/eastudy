@@ -3,6 +3,7 @@ import HomeTab from "./tabs/HomeTab";
 import AnnouncementsTab from "./tabs/AnnouncementsTab";
 import ScheduleTab from "./tabs/ScheduleTab";
 import MaterialsTab from "./tabs/MaterialsTab";
+import StudentsTab from "./tabs/StudentsTab";
 import MoreTab from "./tabs/MoreTab";
 import SettingsTab from "./tabs/SettingsTab";
 
@@ -11,6 +12,7 @@ const tabs = {
     announcements: AnnouncementsTab,
     schedule: ScheduleTab,
     materials: MaterialsTab,
+    students: StudentsTab,
     more: MoreTab,
     quizzes: MoreTab,
     "group-study": MoreTab,

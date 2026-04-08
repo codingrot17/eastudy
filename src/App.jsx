@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import { useEffect } from "react";
 import useThemeStore from "./store/useThemeStore";
 import useAuthStore from "./store/useAuthStore";
+import PWAProvider from "./components/pwa/PWAProvider";
 import LandingPage from "./pages/LandingPage";
 import RepSignup from "./pages/auth/RepSignup";
 import StudentSignup from "./pages/auth/StudentSignup";
@@ -22,39 +23,44 @@ export default function App() {
     }, []);
 
     return (
-        <Routes>
-            {/* Public */}
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/auth/rep/signup" element={<RepSignup />} />
-            <Route path="/auth/student/signup" element={<StudentSignup />} />
-            <Route path="/auth/login" element={<Login />} />
-            <Route path="/auth/callback" element={<AuthCallback />} />
+        <PWAProvider>
+            <Routes>
+                {/* Public */}
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/auth/rep/signup" element={<RepSignup />} />
+                <Route
+                    path="/auth/student/signup"
+                    element={<StudentSignup />}
+                />
+                <Route path="/auth/login" element={<Login />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
 
-            {/* Protected */}
-            <Route
-                path="/dashboard/rep"
-                element={
-                    <ProtectedRoute role="rep">
-                        <RepDashboard />
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/dashboard/student"
-                element={
-                    <ProtectedRoute role="student">
-                        <StudentDashboard />
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/dashboard/assistant"
-                element={
-                    <ProtectedRoute role="assistant">
-                        <AssistantDashboard />
-                    </ProtectedRoute>
-                }
-            />
-        </Routes>
+                {/* Protected */}
+                <Route
+                    path="/dashboard/rep"
+                    element={
+                        <ProtectedRoute role="rep">
+                            <RepDashboard />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/dashboard/student"
+                    element={
+                        <ProtectedRoute role="student">
+                            <StudentDashboard />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/dashboard/assistant"
+                    element={
+                        <ProtectedRoute role="assistant">
+                            <AssistantDashboard />
+                        </ProtectedRoute>
+                    }
+                />
+            </Routes>
+        </PWAProvider>
     );
 }

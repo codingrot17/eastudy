@@ -1,11 +1,26 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Megaphone, Pin, Clock, RefreshCw, AlertCircle } from "lucide-react";
+import {
+    Megaphone,
+    Pin,
+    Clock,
+    RefreshCw,
+    AlertCircle,
+    Bell,
+    BellOff
+} from "lucide-react";
 import { useAnnouncements } from "../../../hooks/useAnnouncements";
+import { usePWAContext } from "../../../components/pwa/PWAProvider";
 
 export default function StudentAnnouncementsTab({ department }) {
     const { announcements, loading, error, refresh } = useAnnouncements(
-        department?.$id
+        department?.$id,
+        { enableNotifications: true }
     );
+    const pwa = usePWAContext();
+
+    const handleEnableNotifs = async () => {
+        await pwa?.requestNotifPermission();
+    };
 
     return (
         <div className="flex flex-col gap-6">
@@ -35,13 +50,47 @@ export default function StudentAnnouncementsTab({ department }) {
                 </div>
             )}
 
-            {/* Real-time badge */}
-            <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800 rounded-2xl px-4 py-3 flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
-                <p className="text-xs text-primary-700 dark:text-primary-400 font-medium">
-                    Live — new announcements appear instantly
-                </p>
-            </div>
+            {/* Notification prompt inline */}
+            {pwa?.notifPermission === "default" && (
+                <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800 rounded-2xl px-4 py-3 flex items-center gap-3">
+                    <Bell
+                        size={16}
+                        className="text-primary-700 dark:text-primary-400 shrink-0"
+                    />
+                    <p className="text-xs text-primary-700 dark:text-primary-400 font-medium flex-1">
+                        Enable notifications to get alerts when new
+                        announcements are posted.
+                    </p>
+                    <button
+                        onClick={handleEnableNotifs}
+                        className="text-xs font-bold text-primary-700 dark:text-primary-400 bg-primary-100 dark:bg-primary-900/40 px-3 py-1.5 rounded-lg hover:bg-primary-200 dark:hover:bg-primary-900/60 transition-colors shrink-0"
+                    >
+                        Enable
+                    </button>
+                </div>
+            )}
+
+            {/* Notifications enabled badge */}
+            {pwa?.notifPermission === "granted" && (
+                <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800 rounded-2xl px-4 py-3 flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+                    <p className="text-xs text-primary-700 dark:text-primary-400 font-medium">
+                        Live — notifications enabled, new announcements appear
+                        instantly
+                    </p>
+                </div>
+            )}
+
+            {/* No notif support */}
+            {pwa?.notifPermission === "denied" && (
+                <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 flex items-center gap-3">
+                    <BellOff size={14} className="text-slate-400 shrink-0" />
+                    <p className="text-xs text-slate-400">
+                        Notifications blocked. Allow them in your browser
+                        settings to get instant updates.
+                    </p>
+                </div>
+            )}
 
             {/* Loading skeletons */}
             {loading ? (

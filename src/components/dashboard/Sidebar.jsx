@@ -1,4 +1,3 @@
-import { NavLink } from "react-router-dom";
 import {
     BookOpen,
     Home,
@@ -11,9 +10,13 @@ import {
     Settings,
     LogOut,
     Copy,
-    Check
+    Check,
+    Download,
+    Bell,
+    BellOff
 } from "lucide-react";
 import { useState } from "react";
+import { usePWAContext } from "../pwa/PWAProvider";
 
 const repNav = [
     { icon: Home, label: "Home", tab: "home" },
@@ -21,7 +24,7 @@ const repNav = [
     { icon: CalendarDays, label: "Schedule", tab: "schedule" },
     { icon: FolderOpen, label: "Materials", tab: "materials" },
     { icon: ClipboardList, label: "Quizzes", tab: "quizzes" },
-    { icon: Users, label: "Group Study", tab: "group-study" },
+    { icon: Users, label: "Students", tab: "students" },
     { icon: Lightbulb, label: "Study Plans", tab: "study-plans" }
 ];
 
@@ -35,6 +38,7 @@ export default function Sidebar({
     loggingOut
 }) {
     const [copied, setCopied] = useState(false);
+    const pwa = usePWAContext();
 
     const copyCode = () => {
         if (!department?.code) return;
@@ -113,8 +117,52 @@ export default function Sidebar({
                 </div>
             )}
 
+            {/* Install App Button — desktop */}
+            {pwa?.canInstall && (
+                <div className="mx-3 mb-3">
+                    <button
+                        onClick={pwa.install}
+                        disabled={pwa.isInstalling}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold bg-white/10 hover:bg-white/15 text-white border border-white/10 transition-all disabled:opacity-60"
+                    >
+                        <Download size={16} className="text-cyan-400" />
+                        {pwa.isInstalling
+                            ? "Installing..."
+                            : "Install Eastudy App"}
+                    </button>
+                </div>
+            )}
+
             {/* Bottom Actions */}
             <div className="px-3 pb-6 flex flex-col gap-1 border-t border-white/10 pt-4">
+                {/* Notification toggle */}
+                <button
+                    onClick={() =>
+                        pwa?.notifPermission === "default" &&
+                        pwa?.requestNotifPermission()
+                    }
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-indigo-200 hover:bg-white/8 hover:text-white transition-all"
+                >
+                    {pwa?.notifPermission === "granted" ? (
+                        <>
+                            <Bell size={18} className="text-green-400" />
+                            Notifications On
+                            <span className="ml-auto w-2 h-2 rounded-full bg-green-400" />
+                        </>
+                    ) : pwa?.notifPermission === "denied" ? (
+                        <>
+                            <BellOff size={18} className="text-red-400" />
+                            Notifications Off
+                        </>
+                    ) : (
+                        <>
+                            <Bell size={18} className="text-amber-400" />
+                            Enable Notifications
+                            <span className="ml-auto w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                        </>
+                    )}
+                </button>
+
                 <button
                     onClick={() => onTabChange("settings")}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
