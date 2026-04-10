@@ -38,11 +38,26 @@ export async function createQuiz({
     });
 }
 
+// Strip Appwrite-internal $fields before sending an update —
+// only those are illegal in updateDocument, everything else is fair game.
+const APPWRITE_INTERNAL = [
+    "$id",
+    "$collectionId",
+    "$databaseId",
+    "$createdAt",
+    "$updatedAt",
+    "$permissions"
+];
+
 export async function updateQuiz(quizId, updates) {
     const payload = { ...updates };
+
+    APPWRITE_INTERNAL.forEach(key => delete payload[key]);
+
     if (payload.questions && typeof payload.questions !== "string") {
         payload.questions = JSON.stringify(payload.questions);
     }
+
     return await databases.updateDocument(DB_ID, QUIZZES_ID, quizId, payload);
 }
 

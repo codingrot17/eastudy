@@ -1,15 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { usePWA } from "../../hooks/usePWA";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-    Download,
-    X,
-    Bell,
-    BellOff,
-    Smartphone,
-    Share,
-    Plus
-} from "lucide-react";
+import { Download, X, Bell, Smartphone, Share, Plus } from "lucide-react";
 
 const PWAContext = createContext(null);
 
@@ -17,10 +10,10 @@ export function usePWAContext() {
     return useContext(PWAContext);
 }
 
-// ── iOS detection helpers ────────────────────────
 function isIOS() {
     return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
+
 function isInStandaloneMode() {
     return (
         window.matchMedia("(display-mode: standalone)").matches ||
@@ -28,11 +21,21 @@ function isInStandaloneMode() {
     );
 }
 
+// Only prompt to install when the user is actually using the app,
+// not while they're on the landing page or auth pages.
+function useIsDashboard() {
+    const { pathname } = useLocation();
+    return pathname.startsWith("/dashboard");
+}
+
 export default function PWAProvider({ children }) {
     const pwa = usePWA();
+    const isDashboard = useIsDashboard();
+
     const [showInstallBanner, setShowInstallBanner] = useState(false);
     const [showIOSGuide, setShowIOSGuide] = useState(false);
     const [showNotifPrompt, setShowNotifPrompt] = useState(false);
+
     const [bannerDismissed, setBannerDismissed] = useState(
         () => sessionStorage.getItem("install-banner-dismissed") === "true"
     );
@@ -40,33 +43,45 @@ export default function PWAProvider({ children }) {
         () => sessionStorage.getItem("ios-prompt-dismissed") === "true"
     );
 
-    // Android/Desktop: show banner after 3s if installable
+    // Android/Desktop install banner — dashboard only, after 3s
     useEffect(() => {
+        if (!isDashboard) {
+            setShowInstallBanner(false);
+            return;
+        }
         if (pwa.canInstall && !bannerDismissed) {
             const t = setTimeout(() => setShowInstallBanner(true), 3000);
             return () => clearTimeout(t);
         }
-    }, [pwa.canInstall, bannerDismissed]);
+    }, [pwa.canInstall, bannerDismissed, isDashboard]);
 
-    // iOS: show guide after 4s if not installed and not dismissed
+    // iOS guide — dashboard only, after 4s
     useEffect(() => {
+        if (!isDashboard) {
+            setShowIOSGuide(false);
+            return;
+        }
         if (isIOS() && !isInStandaloneMode() && !iosDismissed) {
             const t = setTimeout(() => setShowIOSGuide(true), 4000);
             return () => clearTimeout(t);
         }
-    }, [iosDismissed]);
+    }, [iosDismissed, isDashboard]);
 
-    // Notification prompt — show after install banner is gone (or after 10s)
+    // Notification prompt — dashboard only, after install banners have had time
     useEffect(() => {
+        if (!isDashboard) {
+            setShowNotifPrompt(false);
+            return;
+        }
         if (
             pwa.notifPermission === "default" &&
             !showInstallBanner &&
             !showIOSGuide
         ) {
-            const t = setTimeout(() => setShowNotifPrompt(true), 10000);
+            const t = setTimeout(() => setShowNotifPrompt(true), 12000);
             return () => clearTimeout(t);
         }
-    }, [pwa.notifPermission, showInstallBanner, showIOSGuide]);
+    }, [pwa.notifPermission, showInstallBanner, showIOSGuide, isDashboard]);
 
     const dismissBanner = () => {
         setShowInstallBanner(false);
@@ -126,9 +141,8 @@ export default function PWAProvider({ children }) {
                                         Install Eastudy
                                     </p>
                                     <p className="text-xs text-indigo-300 mt-1">
-                                        Get instant notifications for
-                                        announcements, works offline, no app
-                                        store needed.
+                                        Get instant notifications, works
+                                        offline, no app store needed.
                                     </p>
                                     <div className="flex items-center gap-2 mt-3">
                                         <button
@@ -156,7 +170,7 @@ export default function PWAProvider({ children }) {
                                     <X size={16} />
                                 </button>
                             </div>
-                            <div className="h-0.5 bg-gradient-to-r from-cyan-400 to-primary-400" />
+                            <div className="h-0.5 bg-gradient-to-r from-cyan-400 to-indigo-400" />
                         </div>
                     </motion.div>
                 )}
@@ -193,8 +207,7 @@ export default function PWAProvider({ children }) {
                                                 Install Eastudy
                                             </p>
                                             <p className="text-xs text-indigo-300 mt-0.5">
-                                                Add to your home screen for the
-                                                best experience
+                                                Add to your home screen
                                             </p>
                                         </div>
                                     </div>
@@ -208,7 +221,6 @@ export default function PWAProvider({ children }) {
 
                                 <div className="flex flex-col gap-3">
                                     <IOSStep
-                                        num={1}
                                         icon={
                                             <Share
                                                 size={15}
@@ -226,7 +238,6 @@ export default function PWAProvider({ children }) {
                                         }
                                     />
                                     <IOSStep
-                                        num={2}
                                         icon={
                                             <Plus
                                                 size={15}
@@ -235,7 +246,7 @@ export default function PWAProvider({ children }) {
                                         }
                                         text={
                                             <>
-                                                Scroll down and tap{" "}
+                                                Scroll and tap{" "}
                                                 <strong>
                                                     "Add to Home Screen"
                                                 </strong>
@@ -243,13 +254,12 @@ export default function PWAProvider({ children }) {
                                         }
                                     />
                                     <IOSStep
-                                        num={3}
                                         icon={
                                             <span className="text-cyan-400 text-xs font-bold">
                                                 ✓
                                             </span>
                                         }
-                                        text="Tap Add — Eastudy will launch like a native app!"
+                                        text="Tap Add — Eastudy launches like a native app!"
                                     />
                                 </div>
 
@@ -328,7 +338,7 @@ export default function PWAProvider({ children }) {
     );
 }
 
-function IOSStep({ num, icon, text }) {
+function IOSStep({ icon, text }) {
     return (
         <div className="flex items-start gap-3">
             <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center shrink-0 mt-0.5">
