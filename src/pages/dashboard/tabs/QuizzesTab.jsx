@@ -14,19 +14,16 @@ import {
     RefreshCw,
     AlertCircle,
     Users,
-    ChevronDown,
-    ChevronUp,
     Trophy,
     Clock
 } from "lucide-react";
 import { useQuizzes, useQuizResults } from "../../../hooks/useQuizzes";
 import Button from "../../../components/ui/Button";
 
-// ── Question builder default ─────────────────────
 const emptyQuestion = () => ({
     question: "",
     options: ["", "", "", ""],
-    answer: 0 // index of correct option
+    answer: 0
 });
 
 const emptyForm = () => ({
@@ -56,8 +53,6 @@ export default function QuizzesTab({ department, user }) {
     const [formError, setFormError] = useState("");
     const [deletingId, setDeletingId] = useState(null);
 
-    // ── Form handlers ────────────────────────────
-
     const openCreate = () => {
         setForm(emptyForm());
         setEditingQuiz(null);
@@ -78,9 +73,8 @@ export default function QuizzesTab({ department, user }) {
         setView("form");
     };
 
-    const addQuestion = () => {
+    const addQuestion = () =>
         setForm(p => ({ ...p, questions: [...p.questions, emptyQuestion()] }));
-    };
 
     const removeQuestion = idx => {
         if (form.questions.length === 1) return;
@@ -90,16 +84,15 @@ export default function QuizzesTab({ department, user }) {
         }));
     };
 
-    const updateQuestion = (idx, field, val) => {
+    const updateQuestion = (idx, field, val) =>
         setForm(p => ({
             ...p,
             questions: p.questions.map((q, i) =>
                 i === idx ? { ...q, [field]: val } : q
             )
         }));
-    };
 
-    const updateOption = (qIdx, oIdx, val) => {
+    const updateOption = (qIdx, oIdx, val) =>
         setForm(p => ({
             ...p,
             questions: p.questions.map((q, i) =>
@@ -113,17 +106,13 @@ export default function QuizzesTab({ department, user }) {
                     : q
             )
         }));
-    };
 
-    const setAnswer = (qIdx, oIdx) => {
-        updateQuestion(qIdx, "answer", oIdx);
-    };
+    const setAnswer = (qIdx, oIdx) => updateQuestion(qIdx, "answer", oIdx);
 
     const handleSubmit = async e => {
         e.preventDefault();
         setFormError("");
 
-        // Validation
         for (let i = 0; i < form.questions.length; i++) {
             const q = form.questions[i];
             if (!q.question.trim()) {
@@ -216,8 +205,7 @@ export default function QuizzesTab({ department, user }) {
                         <RefreshCw size={18} />
                     </button>
                     <Button size="sm" onClick={openCreate}>
-                        <Plus size={16} className="mr-1" />
-                        New Quiz
+                        <Plus size={16} className="mr-1" /> New Quiz
                     </Button>
                 </div>
             </div>
@@ -278,7 +266,6 @@ export default function QuizzesTab({ department, user }) {
                                         : "border-slate-100 dark:border-slate-800"
                                 }`}
                             >
-                                {/* Badge */}
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <span
                                         className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -310,7 +297,6 @@ export default function QuizzesTab({ department, user }) {
                                     )}
                                 </div>
 
-                                {/* Actions */}
                                 <div className="flex items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800 flex-wrap">
                                     <button
                                         onClick={() =>
@@ -377,7 +363,8 @@ export default function QuizzesTab({ department, user }) {
     );
 }
 
-// ── Quiz Form Component ──────────────────────────
+// ── Quiz Form ────────────────────────────────────
+
 function QuizForm({
     form,
     setForm,
@@ -439,7 +426,7 @@ function QuizForm({
                     />
                     <div className="flex items-center gap-3">
                         <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                            Time limit (minutes)
+                            Time limit (min)
                         </label>
                         <input
                             type="number"
@@ -467,7 +454,6 @@ function QuizForm({
                             key={qi}
                             className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-5 flex flex-col gap-4"
                         >
-                            {/* Question header */}
                             <div className="flex items-start gap-3">
                                 <span className="w-7 h-7 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 text-xs font-extrabold flex items-center justify-center shrink-0 mt-0.5">
                                     {qi + 1}
@@ -497,11 +483,9 @@ function QuizForm({
                                 )}
                             </div>
 
-                            {/* Options */}
                             <div className="flex flex-col gap-2 pl-10">
                                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
-                                    Options — click circle to mark correct
-                                    answer
+                                    Options — tap circle to mark correct answer
                                 </p>
                                 {q.options.map((opt, oi) => (
                                     <div
@@ -536,7 +520,11 @@ function QuizForm({
                                                 )
                                             }
                                             required
-                                            className={`input-field flex-1 ${q.answer === oi ? "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/10" : ""}`}
+                                            className={`input-field flex-1 ${
+                                                q.answer === oi
+                                                    ? "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/10"
+                                                    : ""
+                                            }`}
                                         />
                                     </div>
                                 ))}
@@ -545,24 +533,20 @@ function QuizForm({
                     ))}
                 </div>
 
-                {/* Add question */}
                 <button
                     type="button"
                     onClick={onAddQuestion}
                     className="flex items-center justify-center gap-2 py-4 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-primary-400 hover:text-primary-700 dark:hover:text-primary-400 transition-colors font-semibold text-sm"
                 >
-                    <Plus size={18} />
-                    Add Question
+                    <Plus size={18} /> Add Question
                 </button>
 
                 {formError && (
                     <div className="flex items-center gap-2 text-red-500 text-sm px-1">
-                        <AlertCircle size={15} />
-                        {formError}
+                        <AlertCircle size={15} /> {formError}
                     </div>
                 )}
 
-                {/* Footer */}
                 <div className="flex gap-3">
                     <button
                         type="button"
@@ -589,7 +573,8 @@ function QuizForm({
     );
 }
 
-// ── Results Component ────────────────────────────
+// ── Results / Leaderboard ────────────────────────
+
 function ResultsView({ quiz, onBack }) {
     const { attempts, loading } = useQuizResults(quiz?.$id);
 
@@ -604,6 +589,15 @@ function ResultsView({ quiz, onBack }) {
                   ) / attempts.length
               )
             : 0;
+
+    const medalColor = i =>
+        i === 0
+            ? "text-amber-500"
+            : i === 1
+              ? "text-slate-400"
+              : i === 2
+                ? "text-amber-700"
+                : "text-slate-300 dark:text-slate-600";
 
     return (
         <div className="flex flex-col gap-6">
@@ -622,7 +616,7 @@ function ResultsView({ quiz, onBack }) {
                 </div>
             </div>
 
-            {/* Summary */}
+            {/* Summary stats */}
             <div className="grid grid-cols-3 gap-3">
                 {[
                     {
@@ -696,22 +690,44 @@ function ResultsView({ quiz, onBack }) {
                                 key={a.$id}
                                 className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 flex items-center gap-4"
                             >
+                                {/* Rank */}
                                 <span
-                                    className={`text-sm font-extrabold w-6 text-center shrink-0 ${i === 0 ? "text-amber-500" : i === 1 ? "text-slate-400" : i === 2 ? "text-amber-700" : "text-slate-300"}`}
+                                    className={`text-sm font-extrabold w-6 text-center shrink-0 ${medalColor(i)}`}
                                 >
                                     {i + 1}
                                 </span>
+
+                                {/* Avatar + name */}
+                                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-700 to-cyan-500 flex items-center justify-center shrink-0">
+                                    <span className="text-white font-bold text-sm">
+                                        {a.studentName?.[0]?.toUpperCase() ??
+                                            "?"}
+                                    </span>
+                                </div>
+
                                 <div className="flex-1 min-w-0">
                                     <p className="font-semibold text-sm truncate">
-                                        {a.studentId}
+                                        {a.studentName}
                                     </p>
+                                    <p className="text-xs text-slate-400 truncate">
+                                        {a.studentEmail}
+                                    </p>
+                                    {/* Score bar */}
                                     <div className="mt-1.5 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                                         <div
-                                            className="h-full bg-primary-700 rounded-full"
+                                            className={`h-full rounded-full ${
+                                                pct >= 70
+                                                    ? "bg-green-500"
+                                                    : pct >= 40
+                                                      ? "bg-amber-500"
+                                                      : "bg-red-400"
+                                            }`}
                                             style={{ width: `${pct}%` }}
                                         />
                                     </div>
                                 </div>
+
+                                {/* Score */}
                                 <span className="font-bold text-sm shrink-0">
                                     {a.score}/{a.totalQuestions}{" "}
                                     <span className="text-xs text-slate-400">

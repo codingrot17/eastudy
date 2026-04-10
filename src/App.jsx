@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import useThemeStore from "./store/useThemeStore";
 import useAuthStore from "./store/useAuthStore";
@@ -12,6 +12,7 @@ import RepDashboard from "./pages/dashboard/RepDashboard";
 import AssistantDashboard from "./pages/dashboard/AssistantDashboard";
 import StudentDashboard from "./pages/dashboard/StudentDashboard";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import PwaStart from "./pages/PwaStart";
 
 export default function App() {
     const init = useThemeStore(s => s.init);
@@ -34,6 +35,9 @@ export default function App() {
                 />
                 <Route path="/auth/login" element={<Login />} />
                 <Route path="/auth/callback" element={<AuthCallback />} />
+
+                {/* PWA entry point — redirects to dashboard or login */}
+                <Route path="/pwa-start" element={<PwaStart />} />
 
                 {/* Protected */}
                 <Route

@@ -9,7 +9,8 @@ import {
     ArrowLeft,
     Trophy,
     RefreshCw,
-    X
+    RotateCcw,
+    Loader2
 } from "lucide-react";
 import { useQuizzes, useQuizAttempt } from "../../../hooks/useQuizzes";
 import Button from "../../../components/ui/Button";
@@ -20,16 +21,20 @@ export default function StudentQuizzesTab({ department, user }) {
     });
     const [activeQuiz, setActiveQuiz] = useState(null);
 
+    // When the rep updates a quiz that the student is currently viewing,
+    // close the runner so the stale-version detection re-runs.
+    const handleDone = () => {
+        setActiveQuiz(null);
+        refresh();
+    };
+
     if (activeQuiz) {
         return (
             <QuizRunner
                 quiz={activeQuiz}
                 userId={user?.$id}
                 departmentId={department?.$id}
-                onDone={() => {
-                    setActiveQuiz(null);
-                    refresh();
-                }}
+                onDone={handleDone}
                 onBack={() => setActiveQuiz(null)}
             />
         );
@@ -102,9 +107,15 @@ export default function StudentQuizzesTab({ department, user }) {
     );
 }
 
-// ── Individual Quiz Card with attempt status ─────
+// ── Quiz Card ────────────────────────────────────
+
 function QuizCard({ quiz, userId, onStart }) {
-    const { attempt, loading } = useQuizAttempt(quiz.$id, userId);
+    // Pass quiz.$updatedAt so stale attempt detection works
+    const { attempt, loading, retaking, retake } = useQuizAttempt(
+        quiz.$id,
+        userId,
+        quiz.$updatedAt
+    );
 
     const pct = attempt
         ? Math.round((attempt.score / attempt.totalQuestions) * 100)
@@ -118,6 +129,7 @@ function QuizCard({ quiz, userId, onStart }) {
                     : "border-slate-100 dark:border-slate-800"
             }`}
         >
+            {/* Header */}
             <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                     <p className="font-bold truncate">{quiz.title}</p>
@@ -128,8 +140,9 @@ function QuizCard({ quiz, userId, onStart }) {
                     )}
                     <div className="flex flex-wrap gap-3 mt-2">
                         <span className="flex items-center gap-1 text-xs text-slate-400">
-                            <ClipboardList size={11} /> {quiz.questions.length}{" "}
-                            question{quiz.questions.length !== 1 ? "s" : ""}
+                            <ClipboardList size={11} />
+                            {quiz.questions.length} question
+                            {quiz.questions.length !== 1 ? "s" : ""}
                         </span>
                         {quiz.durationMinutes > 0 && (
                             <span className="flex items-center gap-1 text-xs text-slate-400">
@@ -139,7 +152,7 @@ function QuizCard({ quiz, userId, onStart }) {
                     </div>
                 </div>
 
-                {/* Score badge if attempted */}
+                {/* Score badge */}
                 {!loading && attempt && (
                     <div className="shrink-0 flex flex-col items-center bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-2xl px-4 py-3">
                         <Trophy size={16} className="text-amber-500 mb-1" />
@@ -153,7 +166,7 @@ function QuizCard({ quiz, userId, onStart }) {
                 )}
             </div>
 
-            {/* Score bar if attempted */}
+            {/* Score bar */}
             {!loading && attempt && (
                 <div>
                     <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -161,11 +174,16 @@ function QuizCard({ quiz, userId, onStart }) {
                             initial={{ width: 0 }}
                             animate={{ width: `${pct}%` }}
                             transition={{ duration: 0.8, ease: "easeOut" }}
-                            className={`h-full rounded-full ${pct >= 70 ? "bg-green-500" : pct >= 40 ? "bg-amber-500" : "bg-red-400"}`}
+                            className={`h-full rounded-full ${
+                                pct >= 70
+                                    ? "bg-green-500"
+                                    : pct >= 40
+                                      ? "bg-amber-500"
+                                      : "bg-red-400"
+                            }`}
                         />
                     </div>
                     <p className="text-xs text-slate-400 mt-1 text-right">
-                        Already submitted ·{" "}
                         {pct >= 70
                             ? "Great job! 🎉"
                             : pct >= 40
@@ -175,23 +193,39 @@ function QuizCard({ quiz, userId, onStart }) {
                 </div>
             )}
 
-            {/* CTA */}
-            {!loading && !attempt && (
+            {/* Actions */}
+            {loading ? (
+                <div className="h-9 bg-slate-100 dark:bg-slate-800 rounded-xl animate-pulse" />
+            ) : attempt ? (
+                // Already submitted — show retake option
+                <div className="flex gap-2">
+                    <button
+                        onClick={retake}
+                        disabled={retaking}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                    >
+                        {retaking ? (
+                            <Loader2 size={15} className="animate-spin" />
+                        ) : (
+                            <RotateCcw size={15} />
+                        )}
+                        {retaking ? "Resetting..." : "Retake Quiz"}
+                    </button>
+                </div>
+            ) : (
                 <Button size="sm" onClick={onStart} className="w-full">
                     Start Quiz <ArrowRight size={15} className="ml-1" />
                 </Button>
-            )}
-
-            {loading && (
-                <div className="h-9 bg-slate-100 dark:bg-slate-800 rounded-xl animate-pulse" />
             )}
         </div>
     );
 }
 
 // ── Quiz Runner ──────────────────────────────────
+
 function QuizRunner({ quiz, userId, departmentId, onDone, onBack }) {
-    const { attempt, submit } = useQuizAttempt(quiz.$id, userId);
+    // Pass quiz.$updatedAt so version is stamped on the new attempt
+    const { submit } = useQuizAttempt(quiz.$id, userId, quiz.$updatedAt);
 
     const [answers, setAnswers] = useState({});
     const [currentQ, setCurrentQ] = useState(0);
@@ -203,21 +237,6 @@ function QuizRunner({ quiz, userId, departmentId, onDone, onBack }) {
     );
     const startTime = useRef(Date.now());
     const timerRef = useRef(null);
-
-    // If already attempted, jump straight to result view
-    useEffect(() => {
-        if (attempt) {
-            const pct = Math.round(
-                (attempt.score / attempt.totalQuestions) * 100
-            );
-            setResult({
-                score: attempt.score,
-                total: attempt.totalQuestions,
-                pct
-            });
-            setPhase("result");
-        }
-    }, [attempt]);
 
     // Countdown timer
     useEffect(() => {
@@ -253,11 +272,14 @@ function QuizRunner({ quiz, userId, departmentId, onDone, onBack }) {
                 timeTakenSeconds: timeTaken
             });
         } catch {
-            // already submitted or error — still show result
+            // network error — still show result locally
         }
 
-        const pct = Math.round((score / quiz.questions.length) * 100);
-        setResult({ score, total: quiz.questions.length, pct });
+        setResult({
+            score,
+            total: quiz.questions.length,
+            pct: Math.round((score / quiz.questions.length) * 100)
+        });
         setPhase("result");
         setSubmitting(false);
     }, [answers, quiz, submit, departmentId]);
@@ -289,6 +311,7 @@ function QuizRunner({ quiz, userId, departmentId, onDone, onBack }) {
                     >
                         {result.pct}%
                     </div>
+
                     <div>
                         <p className="text-2xl font-extrabold">
                             {result.pct >= 70
@@ -313,7 +336,11 @@ function QuizRunner({ quiz, userId, departmentId, onDone, onBack }) {
                             return (
                                 <div
                                     key={i}
-                                    className={`rounded-xl border p-4 flex flex-col gap-2 ${correct ? "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10" : "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10"}`}
+                                    className={`rounded-xl border p-4 flex flex-col gap-2 ${
+                                        correct
+                                            ? "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10"
+                                            : "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10"
+                                    }`}
                                 >
                                     <p className="text-sm font-semibold">
                                         {i + 1}. {q.question}
@@ -354,7 +381,6 @@ function QuizRunner({ quiz, userId, departmentId, onDone, onBack }) {
     // ── Quiz screen ──────────────────────────────
     return (
         <div className="flex flex-col gap-6">
-            {/* Header */}
             <div className="flex items-center gap-3">
                 <button
                     onClick={onBack}
@@ -398,14 +424,12 @@ function QuizRunner({ quiz, userId, departmentId, onDone, onBack }) {
                     initial={{ opacity: 0, x: 30 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -30 }}
-                    transition={{ duration: 0.25 }}
+                    transition={{ duration: 0.22 }}
                     className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 flex flex-col gap-5"
                 >
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                            Question {currentQ + 1} of {total}
-                        </span>
-                    </div>
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        Question {currentQ + 1} of {total}
+                    </span>
                     <p className="font-bold text-lg leading-snug">
                         {q.question}
                     </p>
@@ -456,12 +480,12 @@ function QuizRunner({ quiz, userId, departmentId, onDone, onBack }) {
                     >
                         {submitting
                             ? "Submitting..."
-                            : `Submit Quiz (${answered}/${total})`}
+                            : `Submit (${answered}/${total})`}
                     </Button>
                 )}
             </div>
 
-            {/* Question dots */}
+            {/* Question dots nav */}
             <div className="flex flex-wrap gap-2 justify-center">
                 {quiz.questions.map((_, i) => (
                     <button

@@ -2,11 +2,11 @@
     "name": "Eastudy — University Learning Platform",
     "short_name": "Eastudy",
     "description": "Your class schedule, announcements, and materials — all in one place.",
-    "start_url": "/",
+    "start_url": "/pwa-start",
     "scope": "/",
     "display": "standalone",
     "display_override": ["window-controls-overlay", "standalone"],
-    "background_color": "#ffffff",
+    "background_color": "#1E1B4B",
     "theme_color": "#3B35C4",
     "orientation": "portrait-primary",
     "categories": ["education", "productivity"],
@@ -17,6 +17,11 @@
             "sizes": "any",
             "type": "image/svg+xml",
             "purpose": "any maskable"
+        },
+        {
+            "src": "/icons/apple-touch-icon-180.png",
+            "sizes": "any",
+            "type": "image/png"
         }
     ],
     "shortcuts": [
@@ -24,21 +29,21 @@
             "name": "Announcements",
             "short_name": "Updates",
             "description": "View latest class announcements",
-            "url": "/?tab=announcements",
+            "url": "/pwa-start",
             "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
         },
         {
             "name": "Schedule",
             "short_name": "Schedule",
             "description": "View today's class schedule",
-            "url": "/?tab=schedule",
+            "url": "/pwa-start",
             "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
         },
         {
             "name": "Materials",
             "short_name": "Materials",
             "description": "Access study materials",
-            "url": "/?tab=materials",
+            "url": "/pwa-start",
             "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
         }
     ],

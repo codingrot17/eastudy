@@ -5,6 +5,16 @@ export const QUIZZES_ID = import.meta.env.VITE_APPWRITE_QUIZZES_COLLECTION_ID;
 export const QUIZ_ATTEMPTS_ID = import.meta.env
     .VITE_APPWRITE_QUIZ_ATTEMPTS_COLLECTION_ID;
 
+// Appwrite internal fields — always strip before updateDocument
+const INTERNAL = [
+    "$id",
+    "$collectionId",
+    "$databaseId",
+    "$createdAt",
+    "$updatedAt",
+    "$permissions"
+];
+
 function parseQuiz(doc) {
     let questions = [];
     try {
@@ -38,26 +48,12 @@ export async function createQuiz({
     });
 }
 
-// Strip Appwrite-internal $fields before sending an update —
-// only those are illegal in updateDocument, everything else is fair game.
-const APPWRITE_INTERNAL = [
-    "$id",
-    "$collectionId",
-    "$databaseId",
-    "$createdAt",
-    "$updatedAt",
-    "$permissions"
-];
-
 export async function updateQuiz(quizId, updates) {
     const payload = { ...updates };
-
-    APPWRITE_INTERNAL.forEach(key => delete payload[key]);
-
+    INTERNAL.forEach(k => delete payload[k]);
     if (payload.questions && typeof payload.questions !== "string") {
         payload.questions = JSON.stringify(payload.questions);
     }
-
     return await databases.updateDocument(DB_ID, QUIZZES_ID, quizId, payload);
 }
 
@@ -79,6 +75,13 @@ export async function getQuiz(quizId) {
     return parseQuiz(doc);
 }
 
+// ── Attempts ─────────────────────────────────────
+
+/**
+ * Submit a new attempt.
+ * quizVersion = quiz.$updatedAt so we can detect stale attempts when
+ * the rep edits the quiz after a student already submitted.
+ */
 export async function submitAttempt({
     quizId,
     studentId,
@@ -86,7 +89,8 @@ export async function submitAttempt({
     answers,
     score,
     totalQuestions,
-    timeTakenSeconds
+    timeTakenSeconds,
+    quizVersion
 }) {
     return await databases.createDocument(
         DB_ID,
@@ -99,15 +103,21 @@ export async function submitAttempt({
             answers: JSON.stringify(answers),
             score,
             totalQuestions,
-            timeTakenSeconds
+            timeTakenSeconds,
+            quizVersion: quizVersion || ""
         }
     );
 }
 
+/**
+ * Get a student's most recent attempt at a quiz.
+ * Returns null if never attempted.
+ */
 export async function getMyAttempt(quizId, studentId) {
     const res = await databases.listDocuments(DB_ID, QUIZ_ATTEMPTS_ID, [
         Query.equal("quizId", quizId),
         Query.equal("studentId", studentId),
+        Query.orderDesc("$createdAt"),
         Query.limit(1)
     ]);
     if (res.total === 0) return null;
@@ -115,6 +125,17 @@ export async function getMyAttempt(quizId, studentId) {
     return { ...doc, answers: JSON.parse(doc.answers || "{}") };
 }
 
+/**
+ * Delete a student's attempt so they can retake.
+ */
+export async function deleteAttempt(attemptId) {
+    return await databases.deleteDocument(DB_ID, QUIZ_ATTEMPTS_ID, attemptId);
+}
+
+/**
+ * Get all attempts for a quiz (for rep leaderboard).
+ * Returns enriched with studentId — caller resolves names separately.
+ */
 export async function getQuizAttempts(quizId) {
     const res = await databases.listDocuments(DB_ID, QUIZ_ATTEMPTS_ID, [
         Query.equal("quizId", quizId),
