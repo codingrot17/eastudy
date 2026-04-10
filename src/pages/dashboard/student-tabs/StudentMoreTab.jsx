@@ -13,13 +13,15 @@ const moreItems = [
         label: "Quizzes & Tests",
         desc: "Take assessments from your rep",
         color: "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400",
-        soon: true
+        tab: "quizzes",
+        soon: false
     },
     {
         icon: Users,
         label: "Group Study",
         desc: "Join study sessions with classmates",
         color: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400",
+        tab: null,
         soon: true
     },
     {
@@ -27,11 +29,12 @@ const moreItems = [
         label: "Study Plans",
         desc: "Manage your personal study plan",
         color: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400",
+        tab: null,
         soon: true
     }
 ];
 
-export default function StudentMoreTab() {
+export default function StudentMoreTab({ onTabChange }) {
     const { user, profile, department } = useAuthStore();
 
     return (
@@ -91,40 +94,45 @@ export default function StudentMoreTab() {
                 </div>
             )}
 
-            {/* Coming Soon Features */}
+            {/* More Features */}
             <div className="flex flex-col gap-3">
-                {moreItems.map(({ icon: Icon, label, desc, color, soon }) => (
-                    <button
-                        key={label}
-                        disabled={soon}
-                        className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 flex items-center gap-4 text-left disabled:opacity-60 disabled:cursor-not-allowed hover:border-primary-200 dark:hover:border-primary-800 transition-all"
-                    >
-                        <div
-                            className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${color}`}
+                {moreItems.map(
+                    ({ icon: Icon, label, desc, color, tab, soon }) => (
+                        <button
+                            key={label}
+                            onClick={() => tab && onTabChange(tab)}
+                            disabled={soon}
+                            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 flex items-center gap-4 text-left disabled:opacity-60 disabled:cursor-not-allowed hover:border-primary-200 dark:hover:border-primary-800 transition-all"
                         >
-                            <Icon size={20} />
-                        </div>
-                        <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                                <p className="font-semibold text-sm">{label}</p>
-                                {soon && (
-                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 border border-primary-100 dark:border-primary-800">
-                                        SOON
-                                    </span>
-                                )}
+                            <div
+                                className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${color}`}
+                            >
+                                <Icon size={20} />
                             </div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                {desc}
-                            </p>
-                        </div>
-                        {!soon && (
-                            <ChevronRight
-                                size={16}
-                                className="text-slate-400 shrink-0"
-                            />
-                        )}
-                    </button>
-                ))}
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                    <p className="font-semibold text-sm">
+                                        {label}
+                                    </p>
+                                    {soon && (
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 border border-primary-100 dark:border-primary-800">
+                                            SOON
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                    {desc}
+                                </p>
+                            </div>
+                            {!soon && (
+                                <ChevronRight
+                                    size={16}
+                                    className="text-slate-400 shrink-0"
+                                />
+                            )}
+                        </button>
+                    )
+                )}
             </div>
         </div>
     );

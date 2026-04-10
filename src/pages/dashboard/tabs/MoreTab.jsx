@@ -19,10 +19,10 @@ const moreItems = [
     {
         icon: ClipboardList,
         label: "Quizzes & Tests",
-        desc: "Create assessments for your class",
+        desc: "Create and manage class assessments",
         color: "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400",
-        tab: null,
-        soon: true
+        tab: "quizzes",
+        soon: false
     },
     {
         icon: Lightbulb,
@@ -101,11 +101,11 @@ export default function MoreTab({ onTabChange }) {
                 </div>
                 <div>
                     <p className="font-semibold text-primary-900 dark:text-primary-200 text-sm">
-                        More features shipping soon
+                        Study Plans coming soon
                     </p>
                     <p className="text-xs text-primary-700/70 dark:text-primary-400/70 mt-1">
-                        Quizzes and study plans are actively being built for
-                        Eastudy.
+                        Personalized and shared study plans are actively being
+                        built for Eastudy.
                     </p>
                 </div>
             </div>

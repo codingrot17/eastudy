@@ -3,6 +3,7 @@ import StudentHomeTab from "./student-tabs/StudentHomeTab";
 import StudentAnnouncementsTab from "./student-tabs/StudentAnnouncementsTab";
 import StudentScheduleTab from "./student-tabs/StudentScheduleTab";
 import StudentMaterialsTab from "./student-tabs/StudentMaterialsTab";
+import StudentQuizzesTab from "./student-tabs/StudentQuizzesTab";
 import StudentMoreTab from "./student-tabs/StudentMoreTab";
 
 const tabs = {
@@ -10,6 +11,7 @@ const tabs = {
     announcements: StudentAnnouncementsTab,
     schedule: StudentScheduleTab,
     materials: StudentMaterialsTab,
+    quizzes: StudentQuizzesTab,
     more: StudentMoreTab
 };
 

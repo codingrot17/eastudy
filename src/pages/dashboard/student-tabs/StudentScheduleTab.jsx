@@ -5,9 +5,12 @@ import {
     MapPin,
     User,
     RefreshCw,
-    AlertCircle
+    AlertCircle,
+    Bell,
+    BellOff
 } from "lucide-react";
 import { useSchedule } from "../../../hooks/useSchedule";
+import { usePWAContext } from "../../../components/pwa/PWAProvider";
 import { DAYS } from "../../../appwrite/schedule";
 
 const DAY_COLORS = {
@@ -33,7 +36,12 @@ const CARD_LEFT = {
 };
 
 export default function StudentScheduleTab({ department }) {
-    const { byDay, loading, error, refresh } = useSchedule(department?.$id);
+    const pwa = usePWAContext();
+
+    // Enable schedule change notifications for students
+    const { byDay, loading, error, refresh } = useSchedule(department?.$id, {
+        enableNotifications: true
+    });
 
     const todayName = new Date().toLocaleDateString("en-US", {
         weekday: "long"
@@ -65,6 +73,46 @@ export default function StudentScheduleTab({ department }) {
                     <AlertCircle size={16} className="text-red-500 shrink-0" />
                     <p className="text-sm text-red-600 dark:text-red-400">
                         {error}
+                    </p>
+                </div>
+            )}
+
+            {/* Notification status banner */}
+            {pwa?.notifPermission === "default" && (
+                <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800 rounded-2xl px-4 py-3 flex items-center gap-3">
+                    <Bell
+                        size={16}
+                        className="text-primary-700 dark:text-primary-400 shrink-0"
+                    />
+                    <p className="text-xs text-primary-700 dark:text-primary-400 font-medium flex-1">
+                        Enable notifications to get alerts when your timetable
+                        changes.
+                    </p>
+                    <button
+                        onClick={() => pwa?.requestNotifPermission()}
+                        className="text-xs font-bold text-primary-700 dark:text-primary-400 bg-primary-100 dark:bg-primary-900/40 px-3 py-1.5 rounded-lg hover:bg-primary-200 transition-colors shrink-0"
+                    >
+                        Enable
+                    </button>
+                </div>
+            )}
+
+            {pwa?.notifPermission === "granted" && (
+                <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800 rounded-2xl px-4 py-3 flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+                    <p className="text-xs text-primary-700 dark:text-primary-400 font-medium">
+                        Live — you'll be notified of any schedule changes
+                        instantly
+                    </p>
+                </div>
+            )}
+
+            {pwa?.notifPermission === "denied" && (
+                <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 flex items-center gap-3">
+                    <BellOff size={14} className="text-slate-400 shrink-0" />
+                    <p className="text-xs text-slate-400">
+                        Notifications blocked. Allow in browser settings to get
+                        schedule alerts.
                     </p>
                 </div>
             )}
@@ -108,7 +156,7 @@ export default function StudentScheduleTab({ department }) {
                 </div>
             </div>
 
-            {/* Today's classes (expanded at top when there are classes) */}
+            {/* Today's classes */}
             {!loading && todayClasses.length > 0 && (
                 <div className="flex flex-col gap-2">
                     <p className="text-xs font-bold uppercase tracking-widest text-slate-400 px-1">
@@ -150,12 +198,11 @@ export default function StudentScheduleTab({ department }) {
                         No schedule yet
                     </p>
                     <p className="text-sm text-slate-400 max-w-xs">
-                        Your rep hasn't set up the timetable yet. Check back
-                        soon.
+                        Your rep hasn't set up the timetable yet. You'll be
+                        notified when they do.
                     </p>
                 </div>
             ) : (
-                /* Full week view */
                 <div className="flex flex-col gap-4">
                     <p className="text-xs font-bold uppercase tracking-widest text-slate-400 px-1">
                         Full Week
@@ -173,7 +220,6 @@ export default function StudentScheduleTab({ department }) {
                                         : "border-slate-100 dark:border-slate-800"
                                 }`}
                             >
-                                {/* Day header */}
                                 <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800">
                                     <span
                                         className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${DAY_COLORS[day]}`}
