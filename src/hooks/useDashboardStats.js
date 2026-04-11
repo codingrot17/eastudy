@@ -5,6 +5,7 @@ import { Query } from "appwrite";
 const ANNOUNCEMENTS_ID = import.meta.env
     .VITE_APPWRITE_ANNOUNCEMENTS_COLLECTION_ID;
 const SCHEDULES_ID = import.meta.env.VITE_APPWRITE_SCHEDULES_COLLECTION_ID;
+const MATERIALS_ID = import.meta.env.VITE_APPWRITE_MATERIALS_COLLECTION_ID;
 
 export function useDashboardStats(departmentId) {
     const [stats, setStats] = useState({
@@ -28,8 +29,8 @@ export function useDashboardStats(departmentId) {
                     weekday: "long"
                 });
 
-                const [announcementsRes, schedulesTodayRes] = await Promise.all(
-                    [
+                const [announcementsRes, schedulesTodayRes, materialsRes] =
+                    await Promise.all([
                         databases.listDocuments(DB_ID, ANNOUNCEMENTS_ID, [
                             Query.equal("departmentId", departmentId),
                             Query.limit(1)
@@ -38,14 +39,18 @@ export function useDashboardStats(departmentId) {
                             Query.equal("departmentId", departmentId),
                             Query.equal("day", todayName),
                             Query.limit(25)
+                        ]),
+                        databases.listDocuments(DB_ID, MATERIALS_ID, [
+                            Query.equal("departmentId", departmentId),
+                            Query.limit(1)
                         ])
-                    ]
-                );
+                    ]);
 
                 setStats(prev => ({
                     ...prev,
                     announcements: announcementsRes.total,
-                    classesToday: schedulesTodayRes.total
+                    classesToday: schedulesTodayRes.total,
+                    materials: materialsRes.total
                 }));
             } catch (err) {
                 console.warn("useDashboardStats error:", err?.message);
