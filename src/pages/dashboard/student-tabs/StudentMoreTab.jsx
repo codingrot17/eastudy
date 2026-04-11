@@ -21,8 +21,8 @@ const moreItems = [
         label: "Group Study",
         desc: "Join study sessions with classmates",
         color: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400",
-        tab: null,
-        soon: true
+        tab: "group-study",
+        soon: false
     },
     {
         icon: Lightbulb,

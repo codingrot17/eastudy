@@ -29,7 +29,7 @@ export default function HomeTab({ user, department, onTabChange }) {
             icon: Users,
             color: "text-cyan-500",
             bg: "bg-cyan-50 dark:bg-cyan-900/20",
-            tab: null
+            tab: "students" 
         },
         {
             label: "Announcements",
