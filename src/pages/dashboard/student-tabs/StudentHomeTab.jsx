@@ -47,7 +47,7 @@ export default function StudentHomeTab({
             icon: ClipboardList,
             color: "text-amber-500",
             bg: "bg-amber-50 dark:bg-amber-900/20",
-            tab: null
+            tab: "quizzes"
         }
     ];
 

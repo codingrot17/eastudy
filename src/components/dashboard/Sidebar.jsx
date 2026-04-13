@@ -6,6 +6,7 @@ import {
     FolderOpen,
     ClipboardList,
     Users,
+    UsersRound,
     Lightbulb,
     Settings,
     LogOut,
@@ -24,6 +25,7 @@ const repNav = [
     { icon: CalendarDays, label: "Schedule", tab: "schedule" },
     { icon: FolderOpen, label: "Materials", tab: "materials" },
     { icon: ClipboardList, label: "Quizzes", tab: "quizzes" },
+    { icon: UsersRound, label: "Group Study", tab: "group-study" },
     { icon: Users, label: "Students", tab: "students" },
     { icon: Lightbulb, label: "Study Plans", tab: "study-plans" }
 ];

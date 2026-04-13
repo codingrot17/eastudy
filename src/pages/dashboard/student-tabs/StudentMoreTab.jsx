@@ -29,8 +29,8 @@ const moreItems = [
         label: "Study Plans",
         desc: "Manage your personal study plan",
         color: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400",
-        tab: null,
-        soon: true
+        tab: "study-plans",
+        soon: false
     }
 ];
 

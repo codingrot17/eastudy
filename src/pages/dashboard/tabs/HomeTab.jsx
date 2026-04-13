@@ -25,11 +25,13 @@ export default function HomeTab({ user, department, onTabChange }) {
     const statCards = [
         {
             label: "Students",
-            value: department?.studentCount ?? "0",
+            value: department
+                ? `${stats.studentsRegistered ?? 0}/${department.studentCount || "?"}`
+                : "0",
             icon: Users,
             color: "text-cyan-500",
             bg: "bg-cyan-50 dark:bg-cyan-900/20",
-            tab: "students" 
+            tab: "students"
         },
         {
             label: "Announcements",

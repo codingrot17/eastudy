@@ -1,6 +1,7 @@
 import {
     ClipboardList,
     Users,
+    UsersRound,
     Lightbulb,
     Settings,
     ChevronRight,
@@ -25,12 +26,20 @@ const moreItems = [
         soon: false
     },
     {
+        icon: UsersRound,
+        label: "Group Study",
+        desc: "Join study sessions with classmates",
+        color: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400",
+        tab: "group-study",
+        soon: false
+    },
+    {
         icon: Lightbulb,
         label: "Study Plans",
         desc: "Create personal and shared plans",
         color: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400",
-        tab: null,
-        soon: true
+        tab: "study-plans",
+        soon: false
     },
     {
         icon: Settings,
@@ -98,15 +107,6 @@ export default function MoreTab({ onTabChange }) {
                         size={20}
                         className="text-primary-700 dark:text-primary-400"
                     />
-                </div>
-                <div>
-                    <p className="font-semibold text-primary-900 dark:text-primary-200 text-sm">
-                        Study Plans coming soon
-                    </p>
-                    <p className="text-xs text-primary-700/70 dark:text-primary-400/70 mt-1">
-                        Personalized and shared study plans are actively being
-                        built for Eastudy.
-                    </p>
                 </div>
             </div>
         </div>
