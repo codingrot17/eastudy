@@ -19,7 +19,12 @@ const useAuthStore = create(
                 try {
                     const user = await getCurrentUser();
                     if (!user) {
-                        set({ user: null, profile: null, department: null });
+                        set({
+                            user: null,
+                            profile: null,
+                            department: null,
+                            isHydrated: true // ← always mark hydrated even when no session
+                        });
                         return;
                     }
 
@@ -29,12 +34,13 @@ const useAuthStore = create(
                     if (profile?.role === "rep") {
                         department = await getDepartmentByRepId(user.$id);
                     } else if (profile?.role === "assistant") {
-                        // Assistant reps load dept by departmentId on their profile
-                        const { getDepartmentById } =
-                            await import("../appwrite/department");
-                        department = await getDepartmentById(
-                            profile.departmentId
-                        );
+                        if (profile?.departmentId) {
+                            const { getDepartmentById } =
+                                await import("../appwrite/department");
+                            department = await getDepartmentById(
+                                profile.departmentId
+                            );
+                        }
                     } else if (
                         profile?.role === "student" &&
                         profile?.departmentId
@@ -47,26 +53,45 @@ const useAuthStore = create(
                     }
 
                     set({ user, profile, department });
-                } catch {
-                    set({ user: null, profile: null, department: null });
+                } catch (err) {
+                    console.warn("[AuthStore] Hydration error:", err?.message);
+                    // ← CRITICAL FIX: isHydrated MUST be true here so
+                    // ProtectedRoute and PwaStart don't spin forever
+                    set({
+                        user: null,
+                        profile: null,
+                        department: null,
+                        isHydrated: true
+                    });
                 } finally {
+                    // finally always runs — sets isLoading false and
+                    // ensures isHydrated is true even if catch already set it
                     set({ isLoading: false, isHydrated: true });
                 }
             },
 
-            // Set after signup/login
+            // Set after signup / login
             setAuth: (user, profile, department = null) => {
                 set({ user, profile, department });
             },
 
+            // Update department in place (used by SettingsTab after assign/remove)
+            setDepartment: department => {
+                set({ department });
+            },
+
             // Clear on logout
             clear: () => {
-                set({ user: null, profile: null, department: null });
+                set({
+                    user: null,
+                    profile: null,
+                    department: null
+                });
             }
         }),
         {
             name: "auth-storage",
-            // Only persist minimal data - re-hydrate from Appwrite on load
+            // Don't persist anything — re-hydrate from Appwrite on every load
             partialize: () => ({})
         }
     )

@@ -1,26 +1,24 @@
 import { account } from "./config";
 import { OAuthProvider } from "appwrite";
 
-// ── Email/Password ──────────────────────────────
+// ── Email / Password ────────────────────────────
 
 export const createAccount = async (name, email, password) => {
-    // Creates the Appwrite auth account
     const { ID } = await import("appwrite");
     return await account.create(ID.unique(), email, password, name);
 };
 
 export const loginEmail = async (email, password) => {
     try {
-        // Delete existing session first if any
+        // Clear any stale session before logging in
         await account.deleteSession("current");
-    } catch {}
+    } catch {
+        // No active session — that's fine, continue
+    }
     return await account.createEmailPasswordSession(email, password);
 };
 
-export const loginGoogle = async () => {
-    try {
-        await account.deleteSession("current");
-    } catch {}
+export const loginGoogle = () => {
     account.createOAuth2Session(
         OAuthProvider.Google,
         `${window.location.origin}/auth/callback`,
@@ -28,19 +26,15 @@ export const loginGoogle = async () => {
     );
 };
 
-export const loginGoogleAsStudent = async () => {
-    try {
-        await account.deleteSession("current");
-    } catch {
-        /* no session */
-    }
-
+export const loginGoogleAsStudent = () => {
     account.createOAuth2Session(
         OAuthProvider.Google,
         `${window.location.origin}/auth/callback?type=student`,
         `${window.location.origin}/auth/failure`
     );
 };
+
+// ── Session helpers ─────────────────────────────
 
 export const getCurrentUser = async () => {
     try {

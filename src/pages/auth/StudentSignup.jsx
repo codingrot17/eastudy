@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import {
     createAccount,
-    loginGoogle,
     loginGoogleAsStudent,
     getCurrentUser
 } from "../../appwrite/auth";
@@ -55,38 +54,37 @@ export default function StudentSignup() {
         confirm: ""
     });
 
-    // Fetch Google user on OAuth flow
+    // Fetch OAuth user on OAuth flow
     useEffect(() => {
         if (!isOAuth) return;
-        const fetch = async () => {
+        const fetchOAuthUser = async () => {
             try {
                 const user = await getCurrentUser();
                 if (!user) {
                     navigate("/auth/student/signup");
                     return;
                 }
-
                 // Check if profile already exists (returning user)
                 const profile = await getUserProfile(user.$id);
                 if (profile) {
                     navigate(`/dashboard/${profile.role}`);
                     return;
                 }
-
                 setOauthUser(user);
             } catch {
                 navigate("/auth/student/signup");
             }
         };
-        fetch();
-    }, [isOAuth]);
+        fetchOAuthUser();
+    }, [isOAuth]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ── Handlers ─────────────────────────────────
+    // ── Field handlers ────────────────────────────
 
     const handlePersonalChange = e =>
         setPersonal(p => ({ ...p, [e.target.name]: e.target.value }));
 
-    // Step 1 submit — email/password account creation
+    // ── Step 1: Create account then auto-login ────
+
     const handleStep1 = async e => {
         e.preventDefault();
         setError("");
@@ -101,21 +99,14 @@ export default function StudentSignup() {
         }
 
         setStatus("loading");
+
+        // ── STEP A: Create the Appwrite auth account ──────────────
         try {
-            console.log(
-                "Attempting signup with:",
-                personal.email,
-                "pwd length:",
-                personal.password.length
-            );
             await createAccount(
                 personal.name,
                 personal.email,
                 personal.password
             );
-            const { loginEmail } = await import("../../appwrite/auth");
-            await loginEmail(personal.email, personal.password);
-            setStep(2);
         } catch (err) {
             const code = err?.code ?? err?.status;
             if (code == 409 || err?.message?.toLowerCase().includes("unique")) {
@@ -127,23 +118,33 @@ export default function StudentSignup() {
                     "Too many attempts. Please wait a moment and try again."
                 );
             } else {
-                // Log the actual error so you can see what's happening
-                console.error(
-                    "Signup error:",
-                    err?.code,
-                    err?.type,
-                    err?.message
-                );
                 setError(
-                    err?.message || "Something went wrong. Please try again."
+                    err?.message || "Account creation failed. Please try again."
                 );
             }
+            setStatus("idle");
+            return; // ← EXIT: don't attempt login if account creation failed
+        }
+
+        // ── STEP B: Auto-login after successful account creation ──
+        try {
+            const { loginEmail } = await import("../../appwrite/auth");
+            await loginEmail(personal.email, personal.password);
+            setStep(2);
+        } catch (loginErr) {
+            // Account created but auto-login failed — redirect to login
+            console.warn(
+                "[StudentSignup] Auto-login failed:",
+                loginErr?.message
+            );
+            navigate("/auth/login?message=account-created");
         } finally {
             setStatus("idle");
         }
     };
 
-    // Code lookup — search on input change with debounce feel
+    // ── Code lookup ───────────────────────────────
+
     const handleCodeLookup = async () => {
         if (!code.trim() || code.trim().length < 6) return;
         setLookupStatus("searching");
@@ -163,7 +164,8 @@ export default function StudentSignup() {
         }
     };
 
-    // Step 2 submit — link to department
+    // ── Step 2: Link to department ────────────────
+
     const handleStep2 = async e => {
         e.preventDefault();
         setError("");
@@ -187,7 +189,8 @@ export default function StudentSignup() {
                 departmentId: foundDept.$id
             });
 
-            setAuth(user, profile, null);
+            // Pass foundDept as the department — students need it immediately
+            setAuth(user, profile, foundDept);
             navigate("/dashboard/student");
         } catch (err) {
             setError(err.message || "Something went wrong. Please try again.");
@@ -196,7 +199,7 @@ export default function StudentSignup() {
         }
     };
 
-    // ── UI ───────────────────────────────────────
+    // ── Render ────────────────────────────────────
 
     return (
         <div className="min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
@@ -268,33 +271,12 @@ export default function StudentSignup() {
                                     your class code next.
                                 </p>
 
-                                {/* Google OAuth */}
+                                {/* Google OAuth — loginGoogleAsStudent is now synchronous */}
                                 <button
                                     onClick={loginGoogleAsStudent}
                                     className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition font-medium mb-6"
                                 >
-                                    <svg
-                                        width="20"
-                                        height="20"
-                                        viewBox="0 0 48 48"
-                                    >
-                                        <path
-                                            fill="#FFC107"
-                                            d="M43.6 20H24v8h11.3C33.7 33.6 29.3 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 6 1.1 8.1 3l5.7-5.7C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21c10.5 0 20-7.6 20-21 0-1.3-.2-2.7-.4-4z"
-                                        />
-                                        <path
-                                            fill="#FF3D00"
-                                            d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 6 1.1 8.1 3l5.7-5.7C34.6 5.1 29.6 3 24 3c-7.6 0-14.2 4.1-17.7 10.3z"
-                                        />
-                                        <path
-                                            fill="#4CAF50"
-                                            d="M24 45c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4C29.7 36.4 27 37 24 37c-5.2 0-9.6-3.3-11.3-8H6.1v5.6C9.8 40.8 16.5 45 24 45z"
-                                        />
-                                        <path
-                                            fill="#1976D2"
-                                            d="M43.6 20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.8l6.6 5.4C41.6 35.5 44 30.1 44 24c0-1.3-.2-2.7-.4-4z"
-                                        />
-                                    </svg>
+                                    <GoogleIcon />
                                     Continue with Google
                                 </button>
 
@@ -542,5 +524,28 @@ export default function StudentSignup() {
                 </div>
             </div>
         </div>
+    );
+}
+
+function GoogleIcon() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 48 48">
+            <path
+                fill="#FFC107"
+                d="M43.6 20H24v8h11.3C33.7 33.6 29.3 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 6 1.1 8.1 3l5.7-5.7C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21c10.5 0 20-7.6 20-21 0-1.3-.2-2.7-.4-4z"
+            />
+            <path
+                fill="#FF3D00"
+                d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 6 1.1 8.1 3l5.7-5.7C34.6 5.1 29.6 3 24 3c-7.6 0-14.2 4.1-17.7 10.3z"
+            />
+            <path
+                fill="#4CAF50"
+                d="M24 45c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4C29.7 36.4 27 37 24 37c-5.2 0-9.6-3.3-11.3-8H6.1v5.6C9.8 40.8 16.5 45 24 45z"
+            />
+            <path
+                fill="#1976D2"
+                d="M43.6 20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.8l6.6 5.4C41.6 35.5 44 30.1 44 24c0-1.3-.2-2.7-.4-4z"
+            />
+        </svg>
     );
 }
