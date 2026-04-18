@@ -102,6 +102,12 @@ export default function StudentSignup() {
 
         setStatus("loading");
         try {
+            console.log(
+                "Attempting signup with:",
+                personal.email,
+                "pwd length:",
+                personal.password.length
+            );
             await createAccount(
                 personal.name,
                 personal.email,
@@ -111,10 +117,26 @@ export default function StudentSignup() {
             await loginEmail(personal.email, personal.password);
             setStep(2);
         } catch (err) {
-            if (err?.code === 409) {
-                setError("An account with this email already exists.");
+            const code = err?.code ?? err?.status;
+            if (code == 409 || err?.message?.toLowerCase().includes("unique")) {
+                setError(
+                    "An account with this email already exists. Try signing in instead."
+                );
+            } else if (code == 429) {
+                setError(
+                    "Too many attempts. Please wait a moment and try again."
+                );
             } else {
-                setError("Something went wrong. Please try again.");
+                // Log the actual error so you can see what's happening
+                console.error(
+                    "Signup error:",
+                    err?.code,
+                    err?.type,
+                    err?.message
+                );
+                setError(
+                    err?.message || "Something went wrong. Please try again."
+                );
             }
         } finally {
             setStatus("idle");

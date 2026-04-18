@@ -18,6 +18,8 @@ const fadeUp = {
 };
 
 export default function Login() {
+    const [searchParams] = useSearchParams();
+    const callbackError = searchParams.get("error");
     const navigate = useNavigate();
     const { setAuth } = useAuthStore();
 
@@ -128,6 +130,16 @@ export default function Login() {
                         <span className="text-sm text-slate-400">or</span>
                         <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
                     </div>
+
+                    {callbackError === "callback" && (
+                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 mb-4">
+                            <p className="text-sm text-amber-700 dark:text-amber-400">
+                                Sign in took too long to complete. Please try
+                                again — if Google keeps failing, use email and
+                                password instead.
+                            </p>
+                        </div>
+                    )}
 
                     {/* Email Form */}
                     <form
