@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { BookOpen, Loader2 } from "lucide-react";
 import { loginEmail, loginGoogle, getCurrentUser } from "../../appwrite/auth";
