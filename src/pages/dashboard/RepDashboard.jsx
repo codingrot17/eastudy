@@ -9,9 +9,11 @@ import GroupStudyTab from "./tabs/GroupStudyTab";
 import StudyPlansTab from "./tabs/StudyPlansTab";
 import MoreTab from "./tabs/MoreTab";
 import SettingsTab from "./tabs/SettingsTab";
+import FeedTab from "./tabs/FeedTab";
 
 const tabs = {
     home: HomeTab,
+    feed: FeedTab, // ← new
     announcements: AnnouncementsTab,
     schedule: ScheduleTab,
     materials: MaterialsTab,

@@ -7,9 +7,11 @@ import StudentQuizzesTab from "./student-tabs/StudentQuizzesTab";
 import GroupStudyTab from "./tabs/GroupStudyTab";
 import StudyPlansTab from "./tabs/StudyPlansTab";
 import StudentMoreTab from "./student-tabs/StudentMoreTab";
+import FeedTab from "./tabs/FeedTab";
 
 const tabs = {
     home: StudentHomeTab,
+    feed: FeedTab, // ← new
     announcements: StudentAnnouncementsTab,
     schedule: StudentScheduleTab,
     materials: StudentMaterialsTab,

@@ -1,14 +1,10 @@
-import {
-    Home,
-    Megaphone,
-    CalendarDays,
-    FolderOpen,
-    LayoutGrid
-} from "lucide-react";
+import { Home, Rss, CalendarDays, FolderOpen, LayoutGrid } from "lucide-react";
 
+// Feed replaces Announcements in bottom nav (announcements still exist in sidebar/More)
+// The feed IS the primary "alive" surface students will check daily
 const tabs = [
     { icon: Home, label: "Home", tab: "home" },
-    { icon: Megaphone, label: "Updates", tab: "announcements" },
+    { icon: Rss, label: "Feed", tab: "feed" },
     { icon: CalendarDays, label: "Schedule", tab: "schedule" },
     { icon: FolderOpen, label: "Materials", tab: "materials" },
     { icon: LayoutGrid, label: "More", tab: "more" }

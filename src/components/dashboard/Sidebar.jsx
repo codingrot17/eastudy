@@ -1,6 +1,7 @@
 import {
     BookOpen,
     Home,
+    Rss,
     Megaphone,
     CalendarDays,
     FolderOpen,
@@ -21,6 +22,7 @@ import { usePWAContext } from "../pwa/PWAProvider";
 
 const repNav = [
     { icon: Home, label: "Home", tab: "home" },
+    { icon: Rss, label: "Feed", tab: "feed" },
     { icon: Megaphone, label: "Announcements", tab: "announcements" },
     { icon: CalendarDays, label: "Schedule", tab: "schedule" },
     { icon: FolderOpen, label: "Materials", tab: "materials" },
@@ -119,7 +121,7 @@ export default function Sidebar({
                 </div>
             )}
 
-            {/* Install App Button — desktop */}
+            {/* Install App Button */}
             {pwa?.canInstall && (
                 <div className="mx-3 mb-3">
                     <button
@@ -137,7 +139,6 @@ export default function Sidebar({
 
             {/* Bottom Actions */}
             <div className="px-3 pb-6 flex flex-col gap-1 border-t border-white/10 pt-4">
-                {/* Notification toggle */}
                 <button
                     onClick={() =>
                         pwa?.notifPermission === "default" &&
@@ -176,6 +177,7 @@ export default function Sidebar({
                     <Settings size={18} />
                     Settings
                 </button>
+
                 <button
                     onClick={onLogout}
                     disabled={loggingOut}
