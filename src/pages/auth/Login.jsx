@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
-import { BookOpen, Loader2, RefreshCw } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+    BookOpen,
+    Loader2,
+    Mail,
+    AlertTriangle,
+    ArrowRight,
+    RefreshCw
+} from "lucide-react";
 import { loginEmail, loginGoogle, getCurrentUser } from "../../appwrite/auth";
 import {
     getUserProfile,
@@ -17,10 +24,6 @@ const fadeUp = {
     show: { opacity: 1, y: 0, transition: { duration: 0.4 } }
 };
 
-function isIOS() {
-    return /iphone|ipad|ipod/i.test(navigator.userAgent.toLowerCase());
-}
-
 export default function Login() {
     const [searchParams] = useSearchParams();
     const callbackError = searchParams.get("error");
@@ -31,6 +34,10 @@ export default function Login() {
     const [form, setForm] = useState({ email: "", password: "" });
     const [status, setStatus] = useState("idle");
     const [error, setError] = useState("");
+    // When Google fails, show the recovery panel instead of the normal form
+    const [showRecovery, setShowRecovery] = useState(
+        callbackError === "session" || callbackError === "callback"
+    );
 
     const handleChange = e =>
         setForm(p => ({ ...p, [e.target.name]: e.target.value }));
@@ -39,46 +46,35 @@ export default function Login() {
         e.preventDefault();
         setError("");
         setStatus("loading");
-
         try {
             await loginEmail(form.email, form.password);
             const user = await getCurrentUser();
-
             if (!user) {
-                setError(
-                    "Login succeeded but your session couldn't be read. Please try again."
-                );
+                setError("Session couldn't be read. Please try again.");
                 setStatus("idle");
                 return;
             }
-
             const profile = await getUserProfile(user.$id);
-
             if (!profile) {
                 navigate("/auth/rep/signup?oauth=true");
                 return;
             }
-
-            // Load department for all roles with null guards
             let department = null;
-
             if (profile.role === "rep") {
                 department = await getDepartmentByRepId(user.$id);
-            } else if (profile.role === "assistant" && profile.departmentId) {
-                department = await getDepartmentById(profile.departmentId);
-            } else if (profile.role === "student" && profile.departmentId) {
+            } else if (
+                (profile.role === "assistant" || profile.role === "student") &&
+                profile.departmentId
+            ) {
                 department = await getDepartmentById(profile.departmentId);
             }
-
             setAuth(user, profile, department);
             navigate(`/dashboard/${profile.role}`);
         } catch (err) {
             if (err?.code === 401) {
                 setError("Invalid email or password.");
             } else if (err?.code === 429) {
-                setError(
-                    "Too many attempts. Please wait a moment and try again."
-                );
+                setError("Too many attempts. Please wait a moment.");
             } else {
                 setError("Something went wrong. Please try again.");
             }
@@ -86,11 +82,6 @@ export default function Login() {
             setStatus("idle");
         }
     };
-
-    // Determine which error banner to show
-    const showSessionError = callbackError === "session";
-    const showCallbackError = callbackError === "callback";
-    const iosDevice = isIOS();
 
     return (
         <div className="min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
@@ -105,7 +96,6 @@ export default function Login() {
                 <ThemeToggle />
             </div>
 
-            {/* Main */}
             <div className="flex-1 flex items-center justify-center px-6 py-12">
                 <motion.div
                     variants={fadeUp}
@@ -113,149 +103,242 @@ export default function Login() {
                     animate="show"
                     className="w-full max-w-md"
                 >
-                    <h1 className="text-3xl font-extrabold mb-2">
-                        Welcome back
-                    </h1>
-                    <p className="text-slate-500 dark:text-slate-400 mb-8">
-                        Sign in to continue to your dashboard.
-                    </p>
-
-                    {/* Account created successfully */}
-                    {message === "account-created" && (
-                        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 mb-4">
-                            <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">
-                                Account created! Sign in below to continue.
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Session expired error — iOS specific handling */}
-                    {showSessionError && (
-                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-4 mb-4">
-                            <p className="text-sm text-amber-800 dark:text-amber-300 font-semibold mb-1">
-                                {iosDevice
-                                    ? "Safari took too long to verify your Google login"
-                                    : "Your session expired before it could be verified"}
-                            </p>
-                            <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
-                                {iosDevice
-                                    ? "This sometimes happens on iPhone. Tap the button below to try Google sign-in again — it usually works on the second attempt."
-                                    : "Please sign in again. If Google keeps failing, use your email and password instead."}
-                            </p>
-                            {/* Direct retry button — makes it easy to try again */}
-                            <button
-                                onClick={loginGoogle}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-sm font-semibold transition-colors"
+                    {/* ── Google auth failed — recovery panel ── */}
+                    <AnimatePresence mode="wait">
+                        {showRecovery ? (
+                            <motion.div
+                                key="recovery"
+                                initial={{ opacity: 0, y: 16 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -16 }}
+                                className="flex flex-col gap-5"
                             >
-                                <RefreshCw size={14} />
-                                Try Google Sign-in Again
-                            </button>
-                        </div>
-                    )}
+                                {/* Icon + heading */}
+                                <div className="flex flex-col items-center text-center gap-3 pt-4">
+                                    <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center">
+                                        <AlertTriangle
+                                            size={28}
+                                            className="text-amber-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <h1 className="text-2xl font-extrabold">
+                                            Google sign-in didn't work
+                                        </h1>
+                                        <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 max-w-xs mx-auto">
+                                            This sometimes happens on iOS Safari
+                                            and Chrome due to a browser
+                                            limitation. Use one of these options
+                                            to sign in instead.
+                                        </p>
+                                    </div>
+                                </div>
 
-                    {/* Generic callback error */}
-                    {showCallbackError && !showSessionError && (
-                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 mb-4">
-                            <p className="text-sm text-amber-700 dark:text-amber-400">
-                                Google sign-in encountered an error. Please try
-                                again — if it keeps failing, use email and
-                                password instead.
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Google OAuth button */}
-                    <button
-                        onClick={loginGoogle}
-                        className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition font-medium mb-6"
-                    >
-                        <GoogleIcon />
-                        Continue with Google
-                    </button>
-
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
-                        <span className="text-sm text-slate-400">or</span>
-                        <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
-                    </div>
-
-                    {/* Email / Password Form */}
-                    <form
-                        onSubmit={handleSubmit}
-                        className="flex flex-col gap-4"
-                    >
-                        <input
-                            name="email"
-                            type="email"
-                            placeholder="Email address"
-                            value={form.email}
-                            onChange={handleChange}
-                            required
-                            className="input-field"
-                        />
-                        <div className="flex flex-col gap-1">
-                            <input
-                                name="password"
-                                type="password"
-                                placeholder="Password"
-                                value={form.password}
-                                onChange={handleChange}
-                                required
-                                className="input-field"
-                            />
-                            <div className="flex justify-end">
-                                <Link
-                                    to="/auth/forgot-password"
-                                    className="text-xs text-primary-700 dark:text-primary-400 hover:underline"
+                                {/* Option 1 — try Google again */}
+                                <button
+                                    onClick={loginGoogle}
+                                    className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-slate-50 dark:hover:bg-slate-900 transition-all text-left"
                                 >
-                                    Forgot password?
-                                </Link>
-                            </div>
-                        </div>
+                                    <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                                        <RefreshCw
+                                            size={18}
+                                            className="text-slate-500"
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-semibold text-sm">
+                                            Try Google again
+                                        </p>
+                                        <p className="text-xs text-slate-400 mt-0.5">
+                                            Sometimes works on the second
+                                            attempt
+                                        </p>
+                                    </div>
+                                    <ArrowRight
+                                        size={16}
+                                        className="text-slate-400 shrink-0"
+                                    />
+                                </button>
 
-                        {error && (
-                            <p className="text-red-500 text-sm text-center">
-                                {error}
-                            </p>
+                                {/* Option 2 — use email/password */}
+                                <button
+                                    onClick={() => setShowRecovery(false)}
+                                    className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl border-2 border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-all text-left"
+                                >
+                                    <div className="w-10 h-10 rounded-xl bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center shrink-0">
+                                        <Mail
+                                            size={18}
+                                            className="text-primary-700 dark:text-primary-400"
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-semibold text-sm text-primary-900 dark:text-primary-200">
+                                            Sign in with email & password
+                                        </p>
+                                        <p className="text-xs text-primary-700/70 dark:text-primary-400/70 mt-0.5">
+                                            Recommended — works reliably on all
+                                            devices
+                                        </p>
+                                    </div>
+                                    <ArrowRight
+                                        size={16}
+                                        className="text-primary-600 dark:text-primary-400 shrink-0"
+                                    />
+                                </button>
+
+                                {/* Divider */}
+                                <div className="flex items-center gap-3">
+                                    <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800" />
+                                    <span className="text-xs text-slate-400">
+                                        don't have a password?
+                                    </span>
+                                    <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800" />
+                                </div>
+
+                                {/* Option 3 — create account with email */}
+                                <div className="flex flex-col gap-2 text-center text-sm text-slate-500 dark:text-slate-400">
+                                    <p>
+                                        Rep without an account?{" "}
+                                        <Link
+                                            to="/auth/rep/signup"
+                                            className="text-primary-700 dark:text-primary-400 font-semibold hover:underline"
+                                        >
+                                            Register with email
+                                        </Link>
+                                    </p>
+                                    <p>
+                                        Student joining a class?{" "}
+                                        <Link
+                                            to="/auth/student/signup"
+                                            className="text-primary-700 dark:text-primary-400 font-semibold hover:underline"
+                                        >
+                                            Sign up with email
+                                        </Link>
+                                    </p>
+                                </div>
+                            </motion.div>
+                        ) : (
+                            /* ── Normal login form ── */
+                            <motion.div
+                                key="login"
+                                initial={{ opacity: 0, y: 16 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -16 }}
+                                className="flex flex-col gap-0"
+                            >
+                                <h1 className="text-3xl font-extrabold mb-2">
+                                    Welcome back
+                                </h1>
+                                <p className="text-slate-500 dark:text-slate-400 mb-8">
+                                    Sign in to continue to your dashboard.
+                                </p>
+
+                                {message === "account-created" && (
+                                    <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 mb-5">
+                                        <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">
+                                            Account created! Sign in below to
+                                            continue.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Google OAuth */}
+                                <button
+                                    onClick={loginGoogle}
+                                    className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition font-medium mb-6"
+                                >
+                                    <GoogleIcon />
+                                    Continue with Google
+                                </button>
+
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+                                    <span className="text-sm text-slate-400">
+                                        or
+                                    </span>
+                                    <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+                                </div>
+
+                                <form
+                                    onSubmit={handleSubmit}
+                                    className="flex flex-col gap-4"
+                                >
+                                    <input
+                                        name="email"
+                                        type="email"
+                                        placeholder="Email address"
+                                        value={form.email}
+                                        onChange={handleChange}
+                                        required
+                                        className="input-field"
+                                    />
+                                    <div className="flex flex-col gap-1">
+                                        <input
+                                            name="password"
+                                            type="password"
+                                            placeholder="Password"
+                                            value={form.password}
+                                            onChange={handleChange}
+                                            required
+                                            className="input-field"
+                                        />
+                                        <div className="flex justify-end">
+                                            <Link
+                                                to="/auth/forgot-password"
+                                                className="text-xs text-primary-700 dark:text-primary-400 hover:underline"
+                                            >
+                                                Forgot password?
+                                            </Link>
+                                        </div>
+                                    </div>
+
+                                    {error && (
+                                        <p className="text-red-500 text-sm text-center">
+                                            {error}
+                                        </p>
+                                    )}
+
+                                    <Button
+                                        type="submit"
+                                        size="lg"
+                                        className="w-full mt-2"
+                                        disabled={status === "loading"}
+                                    >
+                                        {status === "loading" ? (
+                                            <Loader2
+                                                size={20}
+                                                className="animate-spin mr-2"
+                                            />
+                                        ) : null}
+                                        {status === "loading"
+                                            ? "Signing in..."
+                                            : "Sign In"}
+                                    </Button>
+                                </form>
+
+                                <div className="mt-8 flex flex-col gap-3 text-center text-sm text-slate-500 dark:text-slate-400">
+                                    <p>
+                                        Class rep without an account?{" "}
+                                        <Link
+                                            to="/auth/rep/signup"
+                                            className="text-primary-700 dark:text-primary-400 font-medium hover:underline"
+                                        >
+                                            Register your department
+                                        </Link>
+                                    </p>
+                                    <p>
+                                        Student joining a class?{" "}
+                                        <Link
+                                            to="/auth/student/signup"
+                                            className="text-primary-700 dark:text-primary-400 font-medium hover:underline"
+                                        >
+                                            Join with your code
+                                        </Link>
+                                    </p>
+                                </div>
+                            </motion.div>
                         )}
-
-                        <Button
-                            type="submit"
-                            size="lg"
-                            className="w-full mt-2"
-                            disabled={status === "loading"}
-                        >
-                            {status === "loading" ? (
-                                <Loader2
-                                    size={20}
-                                    className="animate-spin mr-2"
-                                />
-                            ) : null}
-                            {status === "loading" ? "Signing in..." : "Sign In"}
-                        </Button>
-                    </form>
-
-                    {/* Footer Links */}
-                    <div className="mt-8 flex flex-col gap-3 text-center text-sm text-slate-500 dark:text-slate-400">
-                        <p>
-                            Class rep without an account?{" "}
-                            <Link
-                                to="/auth/rep/signup"
-                                className="text-primary-700 dark:text-primary-400 font-medium hover:underline"
-                            >
-                                Register your department
-                            </Link>
-                        </p>
-                        <p>
-                            Student joining a class?{" "}
-                            <Link
-                                to="/auth/student/signup"
-                                className="text-primary-700 dark:text-primary-400 font-medium hover:underline"
-                            >
-                                Join with your code
-                            </Link>
-                        </p>
-                    </div>
+                    </AnimatePresence>
                 </motion.div>
             </div>
         </div>
@@ -271,7 +354,7 @@ function GoogleIcon() {
             />
             <path
                 fill="#FF3D00"
-                d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 6 1.1 8.1 3l5.7-5.7C34.6 5.1 29.6 3 24 3c-7.6 0-14.2 4.1-17.7 10.3-.1.1 0 .3.1.4z"
+                d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 6 1.1 8.1 3l5.7-5.7C34.6 5.1 29.6 3 24 3c-7.6 0-14.2 4.1-17.7 10.3z"
             />
             <path
                 fill="#4CAF50"
