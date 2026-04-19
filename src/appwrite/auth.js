@@ -10,27 +10,40 @@ export const createAccount = async (name, email, password) => {
 
 export const loginEmail = async (email, password) => {
     try {
-        // Clear any stale session before logging in
+        // Clear any stale session first
         await account.deleteSession("current");
     } catch {
-        // No active session — that's fine, continue
+        // No active session — fine
     }
     return await account.createEmailPasswordSession(email, password);
 };
 
-export const loginGoogle = () => {
-    account.createOAuth2Session(
-        OAuthProvider.Google,
-        `${window.location.origin}/auth/callback`,
-        `${window.location.origin}/auth/failure`
+// Build Appwrite OAuth URL manually so we can redirect synchronously
+function buildOAuthURL(successPath, failurePath) {
+    const endpoint = import.meta.env.VITE_APPWRITE_ENDPOINT;
+    const projectId = import.meta.env.VITE_APPWRITE_PROJECT_ID;
+    const provider = "google";
+
+    const successURL = encodeURIComponent(
+        `${window.location.origin}${successPath}`
     );
+    const failureURL = encodeURIComponent(
+        `${window.location.origin}${failurePath}`
+    );
+
+    return `${endpoint}/account/sessions/oauth2/${provider}?project=${projectId}&success=${successURL}&failure=${failureURL}`;
+}
+
+export const loginGoogle = () => {
+    // Fully synchronous — Safari allows this from a click handler
+    window.location.href = buildOAuthURL("/auth/callback", "/auth/failure");
 };
 
 export const loginGoogleAsStudent = () => {
-    account.createOAuth2Session(
-        OAuthProvider.Google,
-        `${window.location.origin}/auth/callback?type=student`,
-        `${window.location.origin}/auth/failure`
+    // Fully synchronous — Safari allows this from a click handler
+    window.location.href = buildOAuthURL(
+        "/auth/callback?type=student",
+        "/auth/failure"
     );
 };
 

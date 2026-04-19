@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { BookOpen, Loader2 } from "lucide-react";
+import { BookOpen, Loader2, RefreshCw } from "lucide-react";
 import { loginEmail, loginGoogle, getCurrentUser } from "../../appwrite/auth";
 import {
     getUserProfile,
@@ -17,15 +17,19 @@ const fadeUp = {
     show: { opacity: 1, y: 0, transition: { duration: 0.4 } }
 };
 
+function isIOS() {
+    return /iphone|ipad|ipod/i.test(navigator.userAgent.toLowerCase());
+}
+
 export default function Login() {
     const [searchParams] = useSearchParams();
     const callbackError = searchParams.get("error");
-    const message = searchParams.get("message"); // e.g. "account-created"
+    const message = searchParams.get("message");
     const navigate = useNavigate();
     const { setAuth } = useAuthStore();
 
     const [form, setForm] = useState({ email: "", password: "" });
-    const [status, setStatus] = useState("idle"); // idle | loading
+    const [status, setStatus] = useState("idle");
     const [error, setError] = useState("");
 
     const handleChange = e =>
@@ -42,7 +46,7 @@ export default function Login() {
 
             if (!user) {
                 setError(
-                    "Login succeeded but session couldn't be read. Please try again."
+                    "Login succeeded but your session couldn't be read. Please try again."
                 );
                 setStatus("idle");
                 return;
@@ -51,26 +55,19 @@ export default function Login() {
             const profile = await getUserProfile(user.$id);
 
             if (!profile) {
-                // Logged in but no profile — incomplete signup
                 navigate("/auth/rep/signup?oauth=true");
                 return;
             }
 
-            // ── Load department based on role with null guards ──────
+            // Load department for all roles with null guards
             let department = null;
 
             if (profile.role === "rep") {
                 department = await getDepartmentByRepId(user.$id);
-            } else if (profile.role === "assistant") {
-                // Assistant must have a departmentId — guard against null
-                if (profile.departmentId) {
-                    department = await getDepartmentById(profile.departmentId);
-                }
-            } else if (profile.role === "student") {
-                // Students may not have joined a department yet
-                if (profile.departmentId) {
-                    department = await getDepartmentById(profile.departmentId);
-                }
+            } else if (profile.role === "assistant" && profile.departmentId) {
+                department = await getDepartmentById(profile.departmentId);
+            } else if (profile.role === "student" && profile.departmentId) {
+                department = await getDepartmentById(profile.departmentId);
             }
 
             setAuth(user, profile, department);
@@ -89,6 +86,11 @@ export default function Login() {
             setStatus("idle");
         }
     };
+
+    // Determine which error banner to show
+    const showSessionError = callbackError === "session";
+    const showCallbackError = callbackError === "callback";
+    const iosDevice = isIOS();
 
     return (
         <div className="min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
@@ -118,36 +120,51 @@ export default function Login() {
                         Sign in to continue to your dashboard.
                     </p>
 
-                    {/* Account created message (redirected from signup auto-login failure) */}
+                    {/* Account created successfully */}
                     {message === "account-created" && (
                         <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3 mb-4">
-                            <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                            <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">
                                 Account created! Sign in below to continue.
                             </p>
                         </div>
                     )}
 
-                    {/* OAuth callback error */}
-                    {callbackError === "callback" && (
+                    {/* Session expired error — iOS specific handling */}
+                    {showSessionError && (
+                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-4 mb-4">
+                            <p className="text-sm text-amber-800 dark:text-amber-300 font-semibold mb-1">
+                                {iosDevice
+                                    ? "Safari took too long to verify your Google login"
+                                    : "Your session expired before it could be verified"}
+                            </p>
+                            <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
+                                {iosDevice
+                                    ? "This sometimes happens on iPhone. Tap the button below to try Google sign-in again — it usually works on the second attempt."
+                                    : "Please sign in again. If Google keeps failing, use your email and password instead."}
+                            </p>
+                            {/* Direct retry button — makes it easy to try again */}
+                            <button
+                                onClick={loginGoogle}
+                                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-sm font-semibold transition-colors"
+                            >
+                                <RefreshCw size={14} />
+                                Try Google Sign-in Again
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Generic callback error */}
+                    {showCallbackError && !showSessionError && (
                         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 mb-4">
                             <p className="text-sm text-amber-700 dark:text-amber-400">
-                                Google sign-in took too long to complete. Please
-                                try again — if it keeps failing, use email and
+                                Google sign-in encountered an error. Please try
+                                again — if it keeps failing, use email and
                                 password instead.
                             </p>
                         </div>
                     )}
 
-                    {callbackError === "session" && (
-                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 mb-4">
-                            <p className="text-sm text-amber-700 dark:text-amber-400">
-                                Your session expired before it could be
-                                verified. Please sign in again.
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Google OAuth — loginGoogle is now synchronous (iOS safe) */}
+                    {/* Google OAuth button */}
                     <button
                         onClick={loginGoogle}
                         className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition font-medium mb-6"
@@ -245,7 +262,6 @@ export default function Login() {
     );
 }
 
-// Extracted so the JSX stays clean
 function GoogleIcon() {
     return (
         <svg width="20" height="20" viewBox="0 0 48 48">
