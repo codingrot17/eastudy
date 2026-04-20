@@ -1,46 +1,45 @@
-const CACHE_NAME = "eastudy-v1";
+const SHELL_CACHE = "eastudy-shell-v2";
+const DATA_CACHE = "eastudy-data-v2";
 const STATIC_ASSETS = ["/", "/index.html", "/manifest.json", "/favicon.svg"];
 
-// ── Install: cache static shell ─────────────────
+// How long to serve Appwrite GET responses from cache before going to network
+// This means on a slow/dead connection students still see their last-known schedule
+const DATA_CACHE_MAX_AGE_SECONDS = 300; // 5 minutes
+
+// ── Install ─────────────────────────────────────
 self.addEventListener("install", event => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then(cache => {
-            return cache.addAll(STATIC_ASSETS);
-        })
+        caches.open(SHELL_CACHE).then(cache => cache.addAll(STATIC_ASSETS))
     );
     self.skipWaiting();
 });
 
 // ── Activate: clean old caches ──────────────────
 self.addEventListener("activate", event => {
+    const CURRENT = [SHELL_CACHE, DATA_CACHE];
     event.waitUntil(
         caches
             .keys()
             .then(keys =>
                 Promise.all(
                     keys
-                        .filter(key => key !== CACHE_NAME)
-                        .map(key => caches.delete(key))
+                        .filter(k => !CURRENT.includes(k))
+                        .map(k => caches.delete(k))
                 )
             )
     );
     self.clients.claim();
 });
 
-// ── Fetch: network first, fallback to cache ─────
+// ── Fetch ────────────────────────────────────────
 self.addEventListener("fetch", event => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // Skip non-GET and Appwrite API calls (always network)
+    // Skip non-GET
     if (request.method !== "GET") return;
-    if (
-        url.hostname.includes("appwrite") ||
-        url.hostname.includes("cloud.appwrite")
-    )
-        return;
 
-    // For navigation requests (HTML pages), serve cached shell
+    // ── Navigation (HTML) — network first, shell fallback ──
     if (request.mode === "navigate") {
         event.respondWith(
             fetch(request).catch(() => caches.match("/index.html"))
@@ -48,15 +47,66 @@ self.addEventListener("fetch", event => {
         return;
     }
 
-    // For JS/CSS/fonts: stale-while-revalidate
+    // ── Appwrite API GET calls — stale-while-revalidate with max age ──
+    // This is the key fix for slow networks:
+    // Students on 2G get their cached announcements/schedule instantly
+    // while the fresh data loads in the background.
+    if (
+        url.hostname.includes("appwrite.io") ||
+        url.hostname.includes("cloud.appwrite")
+    ) {
+        event.respondWith(
+            caches.open(DATA_CACHE).then(async cache => {
+                const cached = await cache.match(request);
+
+                // Check if cached response is still fresh
+                if (cached) {
+                    const cachedDate = cached.headers.get("sw-cached-at");
+                    if (cachedDate) {
+                        const age = (Date.now() - parseInt(cachedDate)) / 1000;
+                        if (age < DATA_CACHE_MAX_AGE_SECONDS) {
+                            // Serve fresh cache, revalidate in background
+                            revalidateInBackground(request, cache);
+                            return cached;
+                        }
+                    }
+                }
+
+                // Cache miss or stale — go to network
+                try {
+                    const response = await fetch(request);
+                    if (response.ok) {
+                        // Clone and add our own timestamp header before caching
+                        const headers = new Headers(response.headers);
+                        headers.set("sw-cached-at", Date.now().toString());
+                        const toCacheResponse = new Response(
+                            await response.clone().blob(),
+                            {
+                                status: response.status,
+                                statusText: response.statusText,
+                                headers
+                            }
+                        );
+                        cache.put(request, toCacheResponse);
+                    }
+                    return response;
+                } catch {
+                    // Completely offline — serve stale cache as last resort
+                    if (cached) return cached;
+                    throw new Error("Offline and no cached data");
+                }
+            })
+        );
+        return;
+    }
+
+    // ── JS/CSS/fonts: stale-while-revalidate ──
     event.respondWith(
-        caches.open(CACHE_NAME).then(async cache => {
+        caches.open(SHELL_CACHE).then(async cache => {
             const cached = await cache.match(request);
             const networkPromise = fetch(request)
                 .then(response => {
-                    if (response.ok) {
-                        cache.put(request, response.clone());
-                    }
+                    if (response.ok) cache.put(request, response.clone());
                     return response;
                 })
                 .catch(() => cached);
@@ -65,6 +115,22 @@ self.addEventListener("fetch", event => {
         })
     );
 });
+
+function revalidateInBackground(request, cache) {
+    fetch(request)
+        .then(async response => {
+            if (!response.ok) return;
+            const headers = new Headers(response.headers);
+            headers.set("sw-cached-at", Date.now().toString());
+            const toCache = new Response(await response.clone().blob(), {
+                status: response.status,
+                statusText: response.statusText,
+                headers
+            });
+            cache.put(request, toCache);
+        })
+        .catch(() => {});
+}
 
 // ── Push Notifications ──────────────────────────
 self.addEventListener("push", event => {
@@ -83,18 +149,18 @@ self.addEventListener("push", event => {
         }
     }
 
-    const options = {
-        body: data.body,
-        icon: data.icon || "/favicon.svg",
-        badge: "/favicon.svg",
-        tag: data.tag || "eastudy-update",
-        renotify: true,
-        vibrate: [200, 100, 200],
-        data: { url: data.url || "/" },
-        actions: data.actions || []
-    };
-
-    event.waitUntil(self.registration.showNotification(data.title, options));
+    event.waitUntil(
+        self.registration.showNotification(data.title, {
+            body: data.body,
+            icon: data.icon || "/favicon.svg",
+            badge: "/favicon.svg",
+            tag: data.tag || "eastudy-update",
+            renotify: true,
+            vibrate: [200, 100, 200],
+            data: { url: data.url || "/" },
+            actions: data.actions || []
+        })
+    );
 });
 
 // ── Notification click ──────────────────────────
@@ -106,7 +172,6 @@ self.addEventListener("notificationclick", event => {
         self.clients
             .matchAll({ type: "window", includeUncontrolled: true })
             .then(clients => {
-                // Focus existing window if open
                 const existing = clients.find(c =>
                     c.url.includes(self.location.origin)
                 );
@@ -128,15 +193,13 @@ self.addEventListener("sync", event => {
 });
 
 async function syncPending() {
-    // Placeholder for future offline-queue sync
     console.log("[SW] Background sync triggered");
 }
 
 // ── Message handler ─────────────────────────────
 self.addEventListener("message", event => {
-    if (event.data?.type === "SKIP_WAITING") {
-        self.skipWaiting();
-    }
+    if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+
     if (event.data?.type === "SET_BADGE") {
         const count = event.data.count || 0;
         if (self.navigator?.setAppBadge) {
@@ -144,5 +207,10 @@ self.addEventListener("message", event => {
                 ? self.navigator.setAppBadge(count)
                 : self.navigator.clearAppBadge();
         }
+    }
+
+    // Allow pages to clear the data cache (e.g. after logout)
+    if (event.data?.type === "CLEAR_DATA_CACHE") {
+        caches.delete(DATA_CACHE);
     }
 });

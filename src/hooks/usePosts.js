@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { client, DB_ID } from "../appwrite/config";
 import {
     getPosts,
@@ -33,7 +33,6 @@ export function usePosts(departmentId) {
         }
     }, [departmentId]);
 
-    // Real-time subscription
     useEffect(() => {
         if (!departmentId) return;
         fetch();
@@ -41,6 +40,7 @@ export function usePosts(departmentId) {
         const channel = `databases.${DB_ID}.collections.${POSTS_ID}.documents`;
         const unsub = client.subscribe(channel, event => {
             const doc = event.payload;
+            // Guard: only process events for this department
             if (doc.departmentId !== departmentId) return;
 
             let parsed;
@@ -104,22 +104,45 @@ export function usePosts(departmentId) {
         return await pinPost(postId, !currentPinned);
     };
 
+    /**
+     * react — optimistic UI + safe server write.
+     *
+     * We update local state immediately for snappy UX, then fire the
+     * server write. The real-time subscription will receive the server's
+     * confirmed state and reconcile within ~200ms.
+     *
+     * Note: toggleReaction now re-fetches fresh data server-side before
+     * writing, so concurrent reactions from multiple users are safe.
+     */
     const react = async (postId, currentReactions, emoji, userId) => {
         // Optimistic update
-        const updated = { ...currentReactions };
-        if (!updated[emoji]) updated[emoji] = [];
-        const idx = updated[emoji].indexOf(userId);
+        const optimistic = { ...currentReactions };
+        if (!optimistic[emoji]) optimistic[emoji] = [];
+        const idx = optimistic[emoji].indexOf(userId);
         if (idx === -1) {
-            updated[emoji] = [...updated[emoji], userId];
+            optimistic[emoji] = [...optimistic[emoji], userId];
         } else {
-            updated[emoji] = updated[emoji].filter(id => id !== userId);
-            if (updated[emoji].length === 0) delete updated[emoji];
+            optimistic[emoji] = optimistic[emoji].filter(id => id !== userId);
+            if (optimistic[emoji].length === 0) delete optimistic[emoji];
         }
         setPosts(prev =>
-            prev.map(p => (p.$id === postId ? { ...p, reactions: updated } : p))
+            prev.map(p =>
+                p.$id === postId ? { ...p, reactions: optimistic } : p
+            )
         );
-        // Persist
-        await toggleReaction(postId, currentReactions, emoji, userId);
+
+        // Server write — real-time will correct if needed
+        try {
+            await toggleReaction(postId, emoji, userId);
+        } catch (err) {
+            // Revert optimistic update on failure
+            console.warn("[usePosts] Reaction failed:", err?.message);
+            setPosts(prev =>
+                prev.map(p =>
+                    p.$id === postId ? { ...p, reactions: currentReactions } : p
+                )
+            );
+        }
     };
 
     return { posts, loading, error, post, remove, pin, react, refresh: fetch };
@@ -137,12 +160,13 @@ export function useComments(postId) {
         try {
             const docs = await getComments(postId);
             setComments(docs);
+        } catch {
+            // Don't crash — just show empty
         } finally {
             setLoading(false);
         }
     }, [postId]);
 
-    // Real-time subscription for comments on this post
     useEffect(() => {
         if (!postId) return;
         fetch();

@@ -8,17 +8,19 @@ import GroupStudyTab from "./tabs/GroupStudyTab";
 import StudyPlansTab from "./tabs/StudyPlansTab";
 import StudentMoreTab from "./student-tabs/StudentMoreTab";
 import FeedTab from "./tabs/FeedTab";
+import ProfileTab from "./tabs/ProfileTab";
 
 const tabs = {
     home: StudentHomeTab,
-    feed: FeedTab, // ← new
+    feed: FeedTab,
     announcements: StudentAnnouncementsTab,
     schedule: StudentScheduleTab,
     materials: StudentMaterialsTab,
     quizzes: StudentQuizzesTab,
     "group-study": GroupStudyTab,
     "study-plans": StudyPlansTab,
-    more: StudentMoreTab
+    more: StudentMoreTab,
+    profile: ProfileTab
 };
 
 export default function StudentDashboard() {

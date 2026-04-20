@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, memo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Rss,
@@ -11,33 +11,30 @@ import {
     Pin,
     PinOff,
     MessageCircle,
-    ChevronDown,
-    ChevronUp,
     Loader2,
     AlertCircle,
     RefreshCw,
-    X
+    X,
+    ChevronDown,
+    ChevronUp,
+    ExternalLink
 } from "lucide-react";
 import { usePosts, useComments } from "../../../hooks/usePosts";
 import Button from "../../../components/ui/Button";
 
-// ── Post type config ─────────────────────────────
+// ── Constants ────────────────────────────────────
 
 const POST_TYPES = [
     {
         value: "text",
         label: "Post",
         icon: FileText,
-        color: "text-primary-700 dark:text-primary-400",
-        bg: "bg-primary-50 dark:bg-primary-900/20",
         placeholder: "Share something with your class…"
     },
     {
         value: "resource",
         label: "Resource",
         icon: LinkIcon,
-        color: "text-violet-600 dark:text-violet-400",
-        bg: "bg-violet-50 dark:bg-violet-900/20",
         placeholder:
             "Describe this resource (e.g. MTH 302 past questions 2022)…"
     },
@@ -45,15 +42,15 @@ const POST_TYPES = [
         value: "question",
         label: "Question",
         icon: HelpCircle,
-        color: "text-amber-600 dark:text-amber-400",
-        bg: "bg-amber-50 dark:bg-amber-900/20",
         placeholder: "Ask your classmates something…"
     }
 ];
 
+// How many characters before we show "Read more"
+const TRUNCATE_AT = 200;
+
 const EMOJIS = ["👍", "🔥", "😂", "❤️", "🙏"];
 
-// Type badge colours
 const TYPE_BADGE = {
     text: "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400",
     resource:
@@ -64,7 +61,6 @@ const TYPE_BADGE = {
 
 const TYPE_LABEL = { text: "Post", resource: "Resource", question: "Question" };
 
-// Role badge
 function roleBadge(role) {
     if (role === "rep")
         return "bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-400";
@@ -73,7 +69,20 @@ function roleBadge(role) {
     return null;
 }
 
-// ── Main component ───────────────────────────────
+function formatTime(iso) {
+    const date = new Date(iso);
+    const diff = Date.now() - date;
+    const mins = Math.floor(diff / 60000);
+    const hrs = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    if (hrs < 24) return `${hrs}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString();
+}
+
+// ── Main ─────────────────────────────────────────
 
 export default function FeedTab({ department, user, profile }) {
     const { posts, loading, error, post, remove, pin, react, refresh } =
@@ -85,7 +94,7 @@ export default function FeedTab({ department, user, profile }) {
     const [url, setUrl] = useState("");
     const [posting, setPosting] = useState(false);
     const [postError, setPostError] = useState("");
-    const [filter, setFilter] = useState("all"); // all | text | resource | question
+    const [filter, setFilter] = useState("all");
 
     const canPin = profile?.role === "rep" || profile?.role === "assistant";
 
@@ -117,10 +126,22 @@ export default function FeedTab({ department, user, profile }) {
         }
     };
 
+    // Stable callbacks to prevent child re-renders
+    const handleReact = useCallback(
+        (postId, reactions, emoji) =>
+            react(postId, reactions, emoji, user?.$id),
+        [react, user?.$id]
+    );
+    const handleRemove = useCallback(postId => remove(postId), [remove]);
+    const handlePin = useCallback(
+        (postId, pinned) => pin(postId, pinned),
+        [pin]
+    );
+
     const filtered =
         filter === "all" ? posts : posts.filter(p => p.type === filter);
 
-    const typeConfig = POST_TYPES.find(t => t.value === activeType);
+    const typeConf = POST_TYPES.find(t => t.value === activeType);
 
     return (
         <div className="flex flex-col gap-5">
@@ -140,13 +161,11 @@ export default function FeedTab({ department, user, profile }) {
                         <RefreshCw size={18} />
                     </button>
                     <Button size="sm" onClick={() => setShowCompose(v => !v)}>
-                        <Plus size={16} className="mr-1" />
-                        Post
+                        <Plus size={16} className="mr-1" /> Post
                     </Button>
                 </div>
             </div>
 
-            {/* Error */}
             {error && (
                 <div className="flex items-center gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl px-4 py-3">
                     <AlertCircle size={16} className="text-red-500 shrink-0" />
@@ -156,7 +175,7 @@ export default function FeedTab({ department, user, profile }) {
                 </div>
             )}
 
-            {/* Compose box */}
+            {/* Compose */}
             <AnimatePresence>
                 {showCompose && (
                     <motion.div
@@ -166,7 +185,7 @@ export default function FeedTab({ department, user, profile }) {
                         exit={{ opacity: 0, y: -10 }}
                         className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden"
                     >
-                        {/* Type selector */}
+                        {/* Type tabs */}
                         <div className="flex border-b border-slate-100 dark:border-slate-800">
                             {POST_TYPES.map(({ value, label, icon: Icon }) => (
                                 <button
@@ -191,13 +210,9 @@ export default function FeedTab({ department, user, profile }) {
                             onSubmit={handlePost}
                             className="p-4 flex flex-col gap-3"
                         >
-                            {/* Author row */}
+                            {/* Author */}
                             <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-700 to-cyan-500 flex items-center justify-center shrink-0">
-                                    <span className="text-white text-xs font-bold">
-                                        {user?.name?.[0]?.toUpperCase() ?? "?"}
-                                    </span>
-                                </div>
+                                <Avatar name={user?.name} size="sm" />
                                 <div>
                                     <p className="text-sm font-semibold leading-none">
                                         {user?.name}
@@ -208,11 +223,10 @@ export default function FeedTab({ department, user, profile }) {
                                 </div>
                             </div>
 
-                            {/* Text area */}
                             <textarea
                                 value={content}
                                 onChange={e => setContent(e.target.value)}
-                                placeholder={typeConfig.placeholder}
+                                placeholder={typeConf.placeholder}
                                 rows={3}
                                 required
                                 autoFocus
@@ -220,7 +234,6 @@ export default function FeedTab({ department, user, profile }) {
                                 className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-600 transition resize-none text-sm"
                             />
 
-                            {/* URL field for resources */}
                             {activeType === "resource" && (
                                 <input
                                     type="url"
@@ -294,7 +307,7 @@ export default function FeedTab({ department, user, profile }) {
                 ))}
             </div>
 
-            {/* Loading */}
+            {/* Posts */}
             {loading ? (
                 <div className="flex flex-col gap-3">
                     {[1, 2, 3].map(i => (
@@ -303,7 +316,7 @@ export default function FeedTab({ department, user, profile }) {
                             className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-5 animate-pulse"
                         >
                             <div className="flex items-center gap-3 mb-3">
-                                <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800" />
+                                <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800" />
                                 <div className="flex-1">
                                     <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-1/3 mb-1.5" />
                                     <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded w-1/5" />
@@ -325,9 +338,8 @@ export default function FeedTab({ department, user, profile }) {
                             : `No ${TYPE_LABEL[filter]?.toLowerCase()}s yet`}
                     </p>
                     <p className="text-sm text-slate-400 max-w-xs">
-                        {filter === "all"
-                            ? "Be the first to post — share a resource, ask a question, or drop an update."
-                            : "Switch to All to see everything, or be the first to post here."}
+                        Be the first — share a resource, ask a question, or drop
+                        an update.
                     </p>
                     <button
                         onClick={() => setShowCompose(true)}
@@ -344,16 +356,13 @@ export default function FeedTab({ department, user, profile }) {
                                 key={p.$id}
                                 post={p}
                                 currentUserId={user?.$id}
+                                currentUserName={user?.name}
                                 currentUserRole={profile?.role}
                                 departmentId={department?.$id}
-                                currentUserName={user?.name}
-                                currentUserRole_={profile?.role}
                                 canPin={canPin}
-                                onReact={emoji =>
-                                    react(p.$id, p.reactions, emoji, user?.$id)
-                                }
-                                onDelete={() => remove(p.$id)}
-                                onPin={() => pin(p.$id, p.pinned)}
+                                onReact={handleReact}
+                                onDelete={handleRemove}
+                                onPin={handlePin}
                             />
                         ))}
                     </AnimatePresence>
@@ -363,33 +372,38 @@ export default function FeedTab({ department, user, profile }) {
     );
 }
 
-// ── Post Card ────────────────────────────────────
+// ── PostCard — memo'd to prevent re-renders from parent state ────────────
 
-function PostCard({
+const PostCard = memo(function PostCard({
     post: p,
     currentUserId,
+    currentUserName,
     currentUserRole,
     departmentId,
-    currentUserName,
-    currentUserRole_,
     canPin,
     onReact,
     onDelete,
     onPin
 }) {
     const [showComments, setShowComments] = useState(false);
-    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [showEmoji, setShowEmoji] = useState(false);
+    const [expanded, setExpanded] = useState(false);
 
     const isOwner = p.authorId === currentUserId;
     const canDelete =
         isOwner || currentUserRole === "rep" || currentUserRole === "assistant";
+    const myEmoji = EMOJIS.find(e => p.reactions[e]?.includes(currentUserId));
     const totalReactions = Object.values(p.reactions).reduce(
         (s, a) => s + a.length,
         0
     );
 
-    // Which emoji did the current user react with (if any)
-    const myEmoji = EMOJIS.find(e => p.reactions[e]?.includes(currentUserId));
+    // Truncation logic
+    const needsTruncation = p.content.length > TRUNCATE_AT;
+    const displayContent =
+        needsTruncation && !expanded
+            ? p.content.slice(0, TRUNCATE_AT).trimEnd() + "…"
+            : p.content;
 
     return (
         <motion.div
@@ -404,7 +418,6 @@ function PostCard({
             }`}
         >
             <div className="p-5 flex flex-col gap-3">
-                {/* Pin badge */}
                 {p.pinned && (
                     <div className="flex items-center gap-1 text-xs font-semibold text-primary-700 dark:text-primary-400">
                         <Pin size={11} /> Pinned
@@ -414,11 +427,7 @@ function PostCard({
                 {/* Author row */}
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-700 to-cyan-500 flex items-center justify-center shrink-0">
-                            <span className="text-white text-sm font-bold">
-                                {p.authorName?.[0]?.toUpperCase() ?? "?"}
-                            </span>
-                        </div>
+                        <Avatar name={p.authorName} size="sm" />
                         <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-semibold text-sm truncate">
@@ -443,13 +452,12 @@ function PostCard({
                         </div>
                     </div>
 
-                    {/* Actions menu */}
                     <div className="flex items-center gap-1 shrink-0">
                         {canPin && (
                             <button
-                                onClick={onPin}
+                                onClick={() => onPin(p.$id, p.pinned)}
                                 title={p.pinned ? "Unpin" : "Pin"}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-primary-700 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-primary-700 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
                             >
                                 {p.pinned ? (
                                     <PinOff size={14} />
@@ -460,7 +468,7 @@ function PostCard({
                         )}
                         {canDelete && (
                             <button
-                                onClick={onDelete}
+                                onClick={() => onDelete(p.$id)}
                                 title="Delete"
                                 className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
                             >
@@ -470,10 +478,28 @@ function PostCard({
                     </div>
                 </div>
 
-                {/* Content */}
-                <p className="text-slate-800 dark:text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">
-                    {p.content}
-                </p>
+                {/* Content with truncation */}
+                <div>
+                    <p className="text-slate-800 dark:text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">
+                        {displayContent}
+                    </p>
+                    {needsTruncation && (
+                        <button
+                            onClick={() => setExpanded(v => !v)}
+                            className="flex items-center gap-1 text-primary-700 dark:text-primary-400 text-xs font-semibold mt-1.5 hover:underline"
+                        >
+                            {expanded ? (
+                                <>
+                                    <ChevronUp size={13} /> Show less
+                                </>
+                            ) : (
+                                <>
+                                    <ChevronDown size={13} /> Read more
+                                </>
+                            )}
+                        </button>
+                    )}
+                </div>
 
                 {/* Resource link */}
                 {p.type === "resource" && p.url && (
@@ -481,43 +507,43 @@ function PostCard({
                         href={p.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400 text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors group"
+                        className="flex items-center gap-2 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400 text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors"
                     >
-                        <LinkIcon size={14} className="shrink-0" />
+                        <ExternalLink size={14} className="shrink-0" />
                         <span className="truncate">{p.url}</span>
                     </a>
                 )}
 
-                {/* Reactions display */}
+                {/* Reaction chips */}
                 {totalReactions > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                        {EMOJIS.filter(e => p.reactions[e]?.length > 0).map(
-                            e => (
-                                <button
-                                    key={e}
-                                    onClick={() => onReact(e)}
-                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-sm border transition-all ${
-                                        p.reactions[e]?.includes(currentUserId)
-                                            ? "bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700"
-                                            : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300"
-                                    }`}
-                                >
-                                    <span>{e}</span>
-                                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                                        {p.reactions[e].length}
-                                    </span>
-                                </button>
-                            )
-                        )}
+                        {EMOJIS.filter(
+                            e => (p.reactions[e]?.length ?? 0) > 0
+                        ).map(e => (
+                            <button
+                                key={e}
+                                onClick={() => onReact(p.$id, p.reactions, e)}
+                                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-sm border transition-all ${
+                                    p.reactions[e]?.includes(currentUserId)
+                                        ? "bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700"
+                                        : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300"
+                                }`}
+                            >
+                                {e}
+                                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                                    {p.reactions[e].length}
+                                </span>
+                            </button>
+                        ))}
                     </div>
                 )}
 
                 {/* Action bar */}
                 <div className="flex items-center gap-1 pt-1 border-t border-slate-100 dark:border-slate-800">
-                    {/* Emoji picker trigger */}
+                    {/* Emoji picker */}
                     <div className="relative">
                         <button
-                            onClick={() => setShowEmojiPicker(v => !v)}
+                            onClick={() => setShowEmoji(v => !v)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
                                 myEmoji
                                     ? "text-primary-700 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20"
@@ -528,7 +554,7 @@ function PostCard({
                         </button>
 
                         <AnimatePresence>
-                            {showEmojiPicker && (
+                            {showEmoji && (
                                 <motion.div
                                     initial={{ opacity: 0, scale: 0.9, y: 4 }}
                                     animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -539,8 +565,8 @@ function PostCard({
                                         <button
                                             key={e}
                                             onClick={() => {
-                                                onReact(e);
-                                                setShowEmojiPicker(false);
+                                                onReact(p.$id, p.reactions, e);
+                                                setShowEmoji(false);
                                             }}
                                             className="text-xl hover:scale-125 transition-transform p-0.5"
                                         >
@@ -552,7 +578,7 @@ function PostCard({
                         </AnimatePresence>
                     </div>
 
-                    {/* Comment toggle */}
+                    {/* Comments toggle */}
                     <button
                         onClick={() => setShowComments(v => !v)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -565,7 +591,7 @@ function PostCard({
                 </div>
             </div>
 
-            {/* Comments section */}
+            {/* Comments */}
             <AnimatePresence initial={false}>
                 {showComments && (
                     <motion.div
@@ -580,7 +606,7 @@ function PostCard({
                             departmentId={departmentId}
                             currentUserId={currentUserId}
                             currentUserName={currentUserName}
-                            currentUserRole={currentUserRole_}
+                            currentUserRole={currentUserRole}
                             canModerate={
                                 currentUserRole === "rep" ||
                                 currentUserRole === "assistant"
@@ -591,9 +617,9 @@ function PostCard({
             </AnimatePresence>
         </motion.div>
     );
-}
+});
 
-// ── Comments Section ─────────────────────────────
+// ── CommentsSection ──────────────────────────────
 
 function CommentsSection({
     postId,
@@ -606,7 +632,6 @@ function CommentsSection({
     const { comments, loading, add, remove } = useComments(postId);
     const [text, setText] = useState("");
     const [sending, setSending] = useState(false);
-    const inputRef = useRef(null);
 
     const handleSend = async e => {
         e.preventDefault();
@@ -628,7 +653,6 @@ function CommentsSection({
 
     return (
         <div className="px-5 py-4 flex flex-col gap-3 bg-slate-50/50 dark:bg-slate-800/30">
-            {/* Comment list */}
             {loading ? (
                 <div className="h-8 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />
             ) : comments.length === 0 ? (
@@ -642,11 +666,7 @@ function CommentsSection({
                             key={c.$id}
                             className="flex items-start gap-2.5 group"
                         >
-                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center shrink-0 mt-0.5">
-                                <span className="text-white text-xs font-bold">
-                                    {c.authorName?.[0]?.toUpperCase() ?? "?"}
-                                </span>
-                            </div>
+                            <Avatar name={c.authorName} size="xs" />
                             <div className="flex-1 min-w-0 bg-white dark:bg-slate-900 rounded-2xl rounded-tl-sm px-3 py-2 border border-slate-100 dark:border-slate-800">
                                 <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                                     <span className="text-xs font-semibold">
@@ -680,15 +700,9 @@ function CommentsSection({
                 </div>
             )}
 
-            {/* Comment input */}
             <form onSubmit={handleSend} className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-700 to-cyan-500 flex items-center justify-center shrink-0">
-                    <span className="text-white text-xs font-bold">
-                        {currentUserName?.[0]?.toUpperCase() ?? "?"}
-                    </span>
-                </div>
+                <Avatar name={currentUserName} size="xs" />
                 <input
-                    ref={inputRef}
                     type="text"
                     value={text}
                     onChange={e => setText(e.target.value)}
@@ -715,18 +729,19 @@ function CommentsSection({
     );
 }
 
-// ── Helpers ──────────────────────────────────────
+// ── Shared Avatar component ──────────────────────
 
-function formatTime(iso) {
-    const date = new Date(iso);
-    const now = new Date();
-    const diff = now - date;
-    const mins = Math.floor(diff / 60000);
-    const hrs = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    if (mins < 1) return "Just now";
-    if (mins < 60) return `${mins}m ago`;
-    if (hrs < 24) return `${hrs}h ago`;
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
+function Avatar({ name, size = "sm" }) {
+    const initials = (name ?? "?")[0].toUpperCase();
+    const sizes = {
+        xs: "w-7 h-7 text-xs",
+        sm: "w-9 h-9 text-sm"
+    };
+    return (
+        <div
+            className={`${sizes[size]} rounded-full bg-gradient-to-br from-primary-700 to-cyan-500 flex items-center justify-center shrink-0`}
+        >
+            <span className="text-white font-bold">{initials}</span>
+        </div>
+    );
 }

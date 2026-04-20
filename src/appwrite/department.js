@@ -1,5 +1,6 @@
 import { databases, DB_ID, DEPARTMENTS_ID, USERS_ID } from "./config";
 import { ID, Query } from "appwrite";
+import { cachedFetch, invalidate, invalidatePrefix } from "./appwriteCache";
 
 // ── Code Generator ──────────────────────────────
 
@@ -26,7 +27,7 @@ export const generateCode = (school, dept, level) => {
     return `${schoolAbbr}-${deptAbbr}${lvl}-${suffix}`;
 };
 
-// ── Check Duplicate Department ──────────────────
+// ── Check Duplicate ─────────────────────────────
 
 export const checkDepartmentExists = async (school, name, level, session) => {
     const res = await databases.listDocuments(DB_ID, DEPARTMENTS_ID, [
@@ -38,7 +39,7 @@ export const checkDepartmentExists = async (school, name, level, session) => {
     return res.total > 0;
 };
 
-// ── Create Department ───────────────────────────
+// ── Create ──────────────────────────────────────
 
 export const createDepartment = async ({
     name,
@@ -49,18 +50,15 @@ export const createDepartment = async ({
     repId,
     code
 }) => {
-    return await databases.createDocument(DB_ID, DEPARTMENTS_ID, ID.unique(), {
-        name,
-        level,
-        session,
-        school,
-        studentCount,
-        repId,
-        code
-    });
+    const doc = await databases.createDocument(
+        DB_ID,
+        DEPARTMENTS_ID,
+        ID.unique(),
+        { name, level, session, school, studentCount, repId, code }
+    );
+    invalidatePrefix("dept:");
+    return doc;
 };
-
-// ── Create User Profile ─────────────────────────
 
 export const createUserProfile = async ({
     authId,
@@ -69,49 +67,85 @@ export const createUserProfile = async ({
     role,
     departmentId = null
 }) => {
-    return await databases.createDocument(DB_ID, USERS_ID, ID.unique(), {
+    const doc = await databases.createDocument(DB_ID, USERS_ID, ID.unique(), {
         authId,
         name,
         email,
         role,
         departmentId
     });
+    invalidatePrefix(`profile:${authId}`);
+    return doc;
 };
 
-// ── Get User Profile by authId ──────────────────
+// ── Reads — these are the hot paths, all cached ─
 
+/**
+ * getUserProfile — called on every app load per user.
+ * Cache for 5 minutes; invalidated on profile updates.
+ */
 export const getUserProfile = async authId => {
-    const res = await databases.listDocuments(DB_ID, USERS_ID, [
-        Query.equal("authId", authId)
-    ]);
-    return res.total > 0 ? res.documents[0] : null;
+    return cachedFetch(
+        `profile:${authId}`,
+        async () => {
+            const res = await databases.listDocuments(DB_ID, USERS_ID, [
+                Query.equal("authId", authId)
+            ]);
+            return res.total > 0 ? res.documents[0] : null;
+        },
+        300_000 // 5 minutes
+    );
 };
 
-// ── Get Department by repId ─────────────────────
-
+/**
+ * getDepartmentByRepId — called every time a rep loads the app.
+ * Cache for 2 minutes; invalidated on department updates.
+ */
 export const getDepartmentByRepId = async repId => {
-    const res = await databases.listDocuments(DB_ID, DEPARTMENTS_ID, [
-        Query.equal("repId", repId)
-    ]);
-    return res.total > 0 ? res.documents[0] : null;
+    return cachedFetch(
+        `dept:rep:${repId}`,
+        async () => {
+            const res = await databases.listDocuments(DB_ID, DEPARTMENTS_ID, [
+                Query.equal("repId", repId)
+            ]);
+            return res.total > 0 ? res.documents[0] : null;
+        },
+        120_000 // 2 minutes
+    );
 };
 
-// ── Get Department by code ──────────────────────
-
+/**
+ * getDepartmentByCode — called during student signup.
+ * Cache for 2 minutes (codes don't change).
+ */
 export const getDepartmentByCode = async code => {
-    const res = await databases.listDocuments(DB_ID, DEPARTMENTS_ID, [
-        Query.equal("code", code.toUpperCase().trim())
-    ]);
-    return res.total > 0 ? res.documents[0] : null;
+    const normalized = code.toUpperCase().trim();
+    return cachedFetch(
+        `dept:code:${normalized}`,
+        async () => {
+            const res = await databases.listDocuments(DB_ID, DEPARTMENTS_ID, [
+                Query.equal("code", normalized)
+            ]);
+            return res.total > 0 ? res.documents[0] : null;
+        },
+        120_000
+    );
 };
 
-// ── Get Department by ID ────────────────────────
-
+/**
+ * getDepartmentById — called by every student and assistant on load.
+ * With 200 students in a department, this would fire 200 times on launch.
+ * Cache for 2 minutes + deduplication = ~1 real call per 2 minutes.
+ */
 export const getDepartmentById = async id => {
-    return await databases.getDocument(DB_ID, DEPARTMENTS_ID, id);
+    return cachedFetch(
+        `dept:id:${id}`,
+        () => databases.getDocument(DB_ID, DEPARTMENTS_ID, id),
+        120_000
+    );
 };
 
-// ── Get students in a department ────────────────
+// ── getDepartmentStudents — not cached (list changes as students join) ─
 
 export const getDepartmentStudents = async departmentId => {
     const res = await databases.listDocuments(DB_ID, USERS_ID, [
@@ -122,10 +156,9 @@ export const getDepartmentStudents = async departmentId => {
     return res.documents;
 };
 
-// ── Assign assistant rep ────────────────────────
+// ── Assistant rep operations ─────────────────────
 
 export const assignAssistantRep = async (userAuthId, departmentId) => {
-    // 1. Find the user doc by authId
     const userRes = await databases.listDocuments(DB_ID, USERS_ID, [
         Query.equal("authId", userAuthId)
     ]);
@@ -133,28 +166,32 @@ export const assignAssistantRep = async (userAuthId, departmentId) => {
 
     const userDoc = userRes.documents[0];
 
-    // 2. Promote user to assistant + set their departmentId
     await databases.updateDocument(DB_ID, USERS_ID, userDoc.$id, {
         role: "assistant",
-        departmentId: departmentId
+        departmentId
     });
 
-    // 3. Update department with assistantRepId — use getDocument first to confirm it exists
     const dept = await databases.getDocument(
         DB_ID,
         DEPARTMENTS_ID,
         departmentId
     );
+    const result = await databases.updateDocument(
+        DB_ID,
+        DEPARTMENTS_ID,
+        dept.$id,
+        {
+            assistantRepId: userAuthId
+        }
+    );
 
-    return await databases.updateDocument(DB_ID, DEPARTMENTS_ID, dept.$id, {
-        assistantRepId: userAuthId
-    });
+    // Bust cache so new role is reflected immediately
+    invalidate(`profile:${userAuthId}`);
+    invalidate(`dept:id:${departmentId}`);
+    return result;
 };
 
-// ── Remove assistant rep ────────────────────────
-
 export const removeAssistantRep = async (userAuthId, departmentId) => {
-    // 1. Find the user doc
     const userRes = await databases.listDocuments(DB_ID, USERS_ID, [
         Query.equal("authId", userAuthId)
     ]);
@@ -162,18 +199,21 @@ export const removeAssistantRep = async (userAuthId, departmentId) => {
 
     const userDoc = userRes.documents[0];
 
-    // 2. Demote back to student (keep departmentId so they stay in the class)
     await databases.updateDocument(DB_ID, USERS_ID, userDoc.$id, {
         role: "student"
     });
 
-    // 3. Remove assistantRepId from department
-    return await databases.updateDocument(DB_ID, DEPARTMENTS_ID, departmentId, {
-        assistantRepId: null
-    });
-};
+    const result = await databases.updateDocument(
+        DB_ID,
+        DEPARTMENTS_ID,
+        departmentId,
+        { assistantRepId: null }
+    );
 
-// ── Get user by email ───────────────────────────
+    invalidate(`profile:${userAuthId}`);
+    invalidate(`dept:id:${departmentId}`);
+    return result;
+};
 
 export const getUserByEmail = async email => {
     const res = await databases.listDocuments(DB_ID, USERS_ID, [
@@ -182,12 +222,16 @@ export const getUserByEmail = async email => {
     return res.total > 0 ? res.documents[0] : null;
 };
 
-// ── Get assistant profile ───────────────────────
-
 export const getAssistantProfile = async assistantRepId => {
     if (!assistantRepId) return null;
-    const res = await databases.listDocuments(DB_ID, USERS_ID, [
-        Query.equal("authId", assistantRepId)
-    ]);
-    return res.total > 0 ? res.documents[0] : null;
+    return cachedFetch(
+        `profile:assistant:${assistantRepId}`,
+        async () => {
+            const res = await databases.listDocuments(DB_ID, USERS_ID, [
+                Query.equal("authId", assistantRepId)
+            ]);
+            return res.total > 0 ? res.documents[0] : null;
+        },
+        120_000
+    );
 };

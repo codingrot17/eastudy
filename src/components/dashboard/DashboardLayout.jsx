@@ -5,6 +5,7 @@ import useAuthStore from "../../store/useAuthStore";
 import Sidebar from "./Sidebar";
 import BottomNav from "./BottomNav";
 import TopBar from "./TopBar";
+import ErrorBoundary from "../ErrorBoundary";
 
 export default function DashboardLayout({ role, tabs, defaultTab = "home" }) {
     const navigate = useNavigate();
@@ -46,15 +47,22 @@ export default function DashboardLayout({ role, tabs, defaultTab = "home" }) {
                 loggingOut={loggingOut}
             />
 
-            {/* Main Content */}
+            {/* Main Content — each tab wrapped in its own ErrorBoundary
+                so a crash in one tab (e.g. FeedTab) doesn't kill the
+                whole dashboard */}
             <main className="lg:ml-64 min-h-screen">
                 <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 pb-28 lg:pb-8">
-                    <ActiveComponent
-                        user={user}
-                        profile={profile}
-                        department={department}
-                        onTabChange={setActiveTab}
-                    />
+                    <ErrorBoundary
+                        inline
+                        fallbackMessage="This tab failed to load"
+                    >
+                        <ActiveComponent
+                            user={user}
+                            profile={profile}
+                            department={department}
+                            onTabChange={setActiveTab}
+                        />
+                    </ErrorBoundary>
                 </div>
             </main>
 

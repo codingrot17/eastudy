@@ -3,11 +3,20 @@ import {
     Users,
     Lightbulb,
     GraduationCap,
+    User,
     ChevronRight
 } from "lucide-react";
 import useAuthStore from "../../../store/useAuthStore";
 
 const moreItems = [
+    {
+        icon: User,
+        label: "My Profile",
+        desc: "Edit your name, theme and preferences",
+        color: "bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400",
+        tab: "profile",
+        soon: false
+    },
     {
         icon: ClipboardList,
         label: "Quizzes & Tests",
@@ -35,7 +44,7 @@ const moreItems = [
 ];
 
 export default function StudentMoreTab({ onTabChange }) {
-    const { user, profile, department } = useAuthStore();
+    const { user, department } = useAuthStore();
 
     return (
         <div className="flex flex-col gap-6">
@@ -46,8 +55,11 @@ export default function StudentMoreTab({ onTabChange }) {
                 </p>
             </div>
 
-            {/* Profile Card */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-5 flex items-center gap-4">
+            {/* Compact profile preview — taps to full profile */}
+            <button
+                onClick={() => onTabChange("profile")}
+                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 flex items-center gap-4 hover:border-primary-200 dark:hover:border-primary-800 transition-all text-left"
+            >
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-700 to-cyan-500 flex items-center justify-center shrink-0">
                     <span className="text-white font-extrabold text-xl">
                         {user?.name?.[0]?.toUpperCase() ?? "S"}
@@ -58,12 +70,13 @@ export default function StudentMoreTab({ onTabChange }) {
                     <p className="text-sm text-slate-500 dark:text-slate-400 truncate">
                         {user?.email ?? "—"}
                     </p>
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-accent-500 mt-1">
-                        <GraduationCap size={12} />
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
+                        <GraduationCap size={11} />
                         Student
                     </span>
                 </div>
-            </div>
+                <ChevronRight size={16} className="text-slate-400 shrink-0" />
+            </button>
 
             {/* Department Info Card */}
             {department && (

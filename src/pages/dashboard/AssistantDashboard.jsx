@@ -10,10 +10,11 @@ import StudyPlansTab from "./tabs/StudyPlansTab";
 import MoreTab from "./tabs/MoreTab";
 import AssistantSettingsTab from "./tabs/AssistantSettingsTab";
 import FeedTab from "./tabs/FeedTab";
+import ProfileTab from "./tabs/ProfileTab";
 
 const tabs = {
     home: HomeTab,
-    feed: FeedTab, // ← new
+    feed: FeedTab,
     announcements: AnnouncementsTab,
     schedule: ScheduleTab,
     materials: MaterialsTab,
@@ -22,7 +23,8 @@ const tabs = {
     more: MoreTab,
     "group-study": GroupStudyTab,
     "study-plans": StudyPlansTab,
-    settings: AssistantSettingsTab
+    settings: AssistantSettingsTab,
+    profile: ProfileTab
 };
 
 export default function AssistantDashboard() {
