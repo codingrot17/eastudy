@@ -6,6 +6,7 @@ import {
     deleteMaterial,
     MATERIALS_ID
 } from "../appwrite/materials";
+import { deleteFile } from "../appwrite/storage";
 
 export function useMaterials(departmentId) {
     const [materials, setMaterials] = useState([]);
@@ -25,6 +26,7 @@ export function useMaterials(departmentId) {
         }
     }, [departmentId]);
 
+    // Real-time subscription
     useEffect(() => {
         if (!departmentId) return;
         fetch();
@@ -48,19 +50,56 @@ export function useMaterials(departmentId) {
         return () => unsubscribe();
     }, [departmentId, fetch]);
 
-    const add = async ({ title, url, category, repId }) => {
+    /**
+     * Add a material — supports both link and file source types.
+     */
+    const add = async ({
+        title,
+        url,
+        category,
+        repId,
+        fileId = null,
+        mimeType = null,
+        fileName = null,
+        sourceType = "link"
+    }) => {
         return await createMaterial({
             title,
             url,
             category,
             departmentId,
-            repId
+            repId,
+            fileId,
+            mimeType,
+            fileName,
+            sourceType
         });
+        // Real-time subscription will update the list
     };
 
+    /**
+     * Delete a material and clean up its storage file if one exists.
+     * Storage deletion is non-blocking — a failed storage delete won't
+     * surface as an error to the user (the DB doc is the source of truth).
+     */
     const remove = async id => {
+        // Capture material before removing from state so we have fileId
+        const material = materials.find(m => m.$id === id);
+
         await deleteMaterial(id);
+
+        // Optimistic local removal (real-time will also fire)
         setMaterials(prev => prev.filter(m => m.$id !== id));
+
+        // Clean up storage file — non-blocking, best-effort
+        if (material?.fileId) {
+            deleteFile(material.fileId).catch(err => {
+                console.warn(
+                    "[useMaterials] Storage cleanup failed:",
+                    err?.message
+                );
+            });
+        }
     };
 
     return { materials, loading, error, add, remove, refresh: fetch };
