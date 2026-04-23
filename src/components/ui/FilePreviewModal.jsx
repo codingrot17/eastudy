@@ -1,4 +1,3 @@
-// src/components/ui/FilePreviewModal.jsx
 import { motion, AnimatePresence } from "framer-motion";
 import {
     X,

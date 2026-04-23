@@ -1,4 +1,4 @@
-import { useState, useRef, memo, useCallback } from "react";
+import { useState, memo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Rss,
@@ -17,9 +17,22 @@ import {
     X,
     ChevronDown,
     ChevronUp,
-    ExternalLink
+    ExternalLink,
+    Image,
+    Download,
+    Eye
 } from "lucide-react";
 import { usePosts, useComments } from "../../../hooks/usePosts";
+import FileUploadButton, {
+    FileAttachmentChip
+} from "../../../components/ui/FileUploadButton";
+import FilePreviewModal from "../../../components/ui/FilePreviewModal";
+import {
+    getFileViewUrl,
+    getFileDownloadUrl,
+    getFileType
+} from "../../../appwrite/storage";
+import { deleteFile } from "../../../appwrite/storage";
 import Button from "../../../components/ui/Button";
 
 // ── Constants ────────────────────────────────────
@@ -35,8 +48,7 @@ const POST_TYPES = [
         value: "resource",
         label: "Resource",
         icon: LinkIcon,
-        placeholder:
-            "Describe this resource (e.g. MTH 302 past questions 2022)…"
+        placeholder: "Describe this resource…"
     },
     {
         value: "question",
@@ -46,9 +58,7 @@ const POST_TYPES = [
     }
 ];
 
-// How many characters before we show "Read more"
 const TRUNCATE_AT = 200;
-
 const EMOJIS = ["👍", "🔥", "😂", "❤️", "🙏"];
 
 const TYPE_BADGE = {
@@ -58,7 +68,6 @@ const TYPE_BADGE = {
     question:
         "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400"
 };
-
 const TYPE_LABEL = { text: "Post", resource: "Resource", question: "Question" };
 
 function roleBadge(role) {
@@ -92,21 +101,34 @@ export default function FeedTab({ department, user, profile }) {
     const [activeType, setActiveType] = useState("text");
     const [content, setContent] = useState("");
     const [url, setUrl] = useState("");
+    const [attachedFile, setAttachedFile] = useState(null);
     const [posting, setPosting] = useState(false);
     const [postError, setPostError] = useState("");
     const [filter, setFilter] = useState("all");
+    const [previewFile, setPreviewFile] = useState(null);
 
     const canPin = profile?.role === "rep" || profile?.role === "assistant";
+
+    const resetCompose = () => {
+        setContent("");
+        setUrl("");
+        setAttachedFile(null);
+        setPostError("");
+        setShowCompose(false);
+    };
 
     const handlePost = async e => {
         e.preventDefault();
         if (!content.trim()) return;
-        if (activeType === "resource" && !url.trim()) {
-            setPostError("Please add a link for your resource.");
+
+        if (activeType === "resource" && !url.trim() && !attachedFile) {
+            setPostError("Please add a link or attach a file.");
             return;
         }
+
         setPosting(true);
         setPostError("");
+
         try {
             await post({
                 authorId: user?.$id,
@@ -114,25 +136,41 @@ export default function FeedTab({ department, user, profile }) {
                 authorRole: profile?.role ?? "student",
                 type: activeType,
                 content: content.trim(),
-                url: activeType === "resource" ? url.trim() : null
+                // URL only when no file attached
+                url: attachedFile ? null : url.trim() || null,
+                // File fields
+                fileId: attachedFile?.$id ?? null,
+                mimeType: attachedFile?.mimeType ?? null,
+                fileName: attachedFile?.name ?? null,
+                sourceType: attachedFile ? "file" : url.trim() ? "link" : "none"
             });
-            setContent("");
-            setUrl("");
-            setShowCompose(false);
-        } catch {
+            resetCompose();
+        } catch (err) {
+            console.error("[FeedTab] post error:", err);
             setPostError("Failed to post. Please try again.");
         } finally {
             setPosting(false);
         }
     };
 
-    // Stable callbacks to prevent child re-renders
     const handleReact = useCallback(
         (postId, reactions, emoji) =>
             react(postId, reactions, emoji, user?.$id),
         [react, user?.$id]
     );
-    const handleRemove = useCallback(postId => remove(postId), [remove]);
+
+    const handleRemove = useCallback(
+        async postId => {
+            // Clean up storage file if the post had one
+            const target = posts.find(p => p.$id === postId);
+            if (target?.fileId) {
+                deleteFile(target.fileId).catch(() => {});
+            }
+            remove(postId);
+        },
+        [remove, posts]
+    );
+
     const handlePin = useCallback(
         (postId, pinned) => pin(postId, pinned),
         [pin]
@@ -175,7 +213,7 @@ export default function FeedTab({ department, user, profile }) {
                 </div>
             )}
 
-            {/* Compose */}
+            {/* Compose box */}
             <AnimatePresence>
                 {showCompose && (
                     <motion.div
@@ -234,15 +272,73 @@ export default function FeedTab({ department, user, profile }) {
                                 className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-600 transition resize-none text-sm"
                             />
 
+                            {/* Resource-specific: link OR file */}
                             {activeType === "resource" && (
-                                <input
-                                    type="url"
-                                    placeholder="Paste link (Google Drive, PDF, YouTube…)"
-                                    value={url}
-                                    onChange={e => setUrl(e.target.value)}
-                                    required
-                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-600 transition text-sm"
-                                />
+                                <div className="flex flex-col gap-2">
+                                    {!attachedFile && (
+                                        <input
+                                            type="url"
+                                            placeholder="Paste a link (Google Drive, YouTube, PDF URL…)"
+                                            value={url}
+                                            onChange={e =>
+                                                setUrl(e.target.value)
+                                            }
+                                            className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-600 transition text-sm"
+                                        />
+                                    )}
+
+                                    {/* File attach (only when no link typed) */}
+                                    {!url.trim() && (
+                                        <div className="flex items-center gap-2">
+                                            {attachedFile ? (
+                                                <FileAttachmentChip
+                                                    file={attachedFile}
+                                                    onRemove={() =>
+                                                        setAttachedFile(null)
+                                                    }
+                                                />
+                                            ) : (
+                                                <>
+                                                    <FileUploadButton
+                                                        onUpload={
+                                                            setAttachedFile
+                                                        }
+                                                        disabled={posting}
+                                                        size="sm"
+                                                    />
+                                                    <span className="text-xs text-slate-400">
+                                                        or attach a file
+                                                    </span>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Non-resource: optional file attach */}
+                            {activeType !== "resource" && (
+                                <div className="flex items-center gap-2">
+                                    {attachedFile ? (
+                                        <FileAttachmentChip
+                                            file={attachedFile}
+                                            onRemove={() =>
+                                                setAttachedFile(null)
+                                            }
+                                        />
+                                    ) : (
+                                        <>
+                                            <FileUploadButton
+                                                onUpload={setAttachedFile}
+                                                disabled={posting}
+                                                size="sm"
+                                            />
+                                            <span className="text-xs text-slate-400">
+                                                Attach a file (optional)
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
                             )}
 
                             {postError && (
@@ -258,12 +354,7 @@ export default function FeedTab({ department, user, profile }) {
                                 <div className="flex gap-2">
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            setShowCompose(false);
-                                            setContent("");
-                                            setUrl("");
-                                            setPostError("");
-                                        }}
+                                        onClick={resetCompose}
                                         className="px-4 py-2 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                                     >
                                         Cancel
@@ -307,7 +398,7 @@ export default function FeedTab({ department, user, profile }) {
                 ))}
             </div>
 
-            {/* Posts */}
+            {/* Posts list */}
             {loading ? (
                 <div className="flex flex-col gap-3">
                     {[1, 2, 3].map(i => (
@@ -363,19 +454,26 @@ export default function FeedTab({ department, user, profile }) {
                                 onReact={handleReact}
                                 onDelete={handleRemove}
                                 onPin={handlePin}
+                                onPreview={setPreviewFile}
                             />
                         ))}
                     </AnimatePresence>
                 </div>
             )}
+
+            {/* File preview modal — shared across all post cards */}
+            <FilePreviewModal
+                file={previewFile}
+                onClose={() => setPreviewFile(null)}
+            />
         </div>
     );
 }
 
-// ── PostCard — memo'd to prevent re-renders from parent state ────────────
+// ── PostCard ──────────────────────────────────────────────────────────────────
 
 const PostCard = memo(function PostCard({
-    post: p,
+    post,
     currentUserId,
     currentUserName,
     currentUserRole,
@@ -383,27 +481,38 @@ const PostCard = memo(function PostCard({
     canPin,
     onReact,
     onDelete,
-    onPin
+    onPin,
+    onPreview
 }) {
     const [showComments, setShowComments] = useState(false);
     const [showEmoji, setShowEmoji] = useState(false);
     const [expanded, setExpanded] = useState(false);
 
-    const isOwner = p.authorId === currentUserId;
+    const isOwner = post.authorId === currentUserId;
     const canDelete =
         isOwner || currentUserRole === "rep" || currentUserRole === "assistant";
-    const myEmoji = EMOJIS.find(e => p.reactions[e]?.includes(currentUserId));
-    const totalReactions = Object.values(p.reactions).reduce(
+    const myEmoji = EMOJIS.find(e =>
+        post.reactions[e]?.includes(currentUserId)
+    );
+    const totalReactions = Object.values(post.reactions).reduce(
         (s, a) => s + a.length,
         0
     );
 
-    // Truncation logic
-    const needsTruncation = p.content.length > TRUNCATE_AT;
+    // Truncation
+    const needsTruncation = post.content.length > TRUNCATE_AT;
     const displayContent =
         needsTruncation && !expanded
-            ? p.content.slice(0, TRUNCATE_AT).trimEnd() + "…"
-            : p.content;
+            ? post.content.slice(0, TRUNCATE_AT).trimEnd() + "…"
+            : post.content;
+
+    // ── File attachment detection ──────────────────────────────────────────
+    // Use explicit check: sourceType must be "file" AND fileId must exist
+    const hasFile = post.sourceType === "file" && !!post.fileId;
+    const fileType = hasFile ? getFileType(post.mimeType) : null;
+
+    // Debug helper — remove after confirming it works
+    // console.log(`[PostCard ${post.$id}] sourceType=${post.sourceType} fileId=${post.fileId} hasFile=${hasFile}`);
 
     return (
         <motion.div
@@ -412,42 +521,42 @@ const PostCard = memo(function PostCard({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             className={`bg-white dark:bg-slate-900 rounded-2xl border overflow-hidden ${
-                p.pinned
+                post.pinned
                     ? "border-primary-200 dark:border-primary-800"
                     : "border-slate-100 dark:border-slate-800"
             }`}
         >
             <div className="p-5 flex flex-col gap-3">
-                {p.pinned && (
+                {post.pinned && (
                     <div className="flex items-center gap-1 text-xs font-semibold text-primary-700 dark:text-primary-400">
                         <Pin size={11} /> Pinned
                     </div>
                 )}
 
-                {/* Author row */}
+                {/* Author */}
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2.5 min-w-0">
-                        <Avatar name={p.authorName} size="sm" />
+                        <Avatar name={post.authorName} size="sm" />
                         <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-semibold text-sm truncate">
-                                    {p.authorName}
+                                    {post.authorName}
                                 </span>
-                                {p.authorRole !== "student" && (
+                                {post.authorRole !== "student" && (
                                     <span
-                                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full capitalize ${roleBadge(p.authorRole)}`}
+                                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full capitalize ${roleBadge(post.authorRole)}`}
                                     >
-                                        {p.authorRole}
+                                        {post.authorRole}
                                     </span>
                                 )}
                                 <span
-                                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${TYPE_BADGE[p.type]}`}
+                                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${TYPE_BADGE[post.type]}`}
                                 >
-                                    {TYPE_LABEL[p.type]}
+                                    {TYPE_LABEL[post.type]}
                                 </span>
                             </div>
                             <p className="text-xs text-slate-400 mt-0.5">
-                                {formatTime(p.$createdAt)}
+                                {formatTime(post.$createdAt)}
                             </p>
                         </div>
                     </div>
@@ -455,11 +564,11 @@ const PostCard = memo(function PostCard({
                     <div className="flex items-center gap-1 shrink-0">
                         {canPin && (
                             <button
-                                onClick={() => onPin(p.$id, p.pinned)}
-                                title={p.pinned ? "Unpin" : "Pin"}
+                                onClick={() => onPin(post.$id, post.pinned)}
+                                title={post.pinned ? "Unpin" : "Pin"}
                                 className="p-1.5 rounded-lg text-slate-400 hover:text-primary-700 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
                             >
-                                {p.pinned ? (
+                                {post.pinned ? (
                                     <PinOff size={14} />
                                 ) : (
                                     <Pin size={14} />
@@ -468,7 +577,7 @@ const PostCard = memo(function PostCard({
                         )}
                         {canDelete && (
                             <button
-                                onClick={() => onDelete(p.$id)}
+                                onClick={() => onDelete(post.$id)}
                                 title="Delete"
                                 className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
                             >
@@ -478,7 +587,7 @@ const PostCard = memo(function PostCard({
                     </div>
                 </div>
 
-                {/* Content with truncation */}
+                {/* Text content */}
                 <div>
                     <p className="text-slate-800 dark:text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">
                         {displayContent}
@@ -501,37 +610,52 @@ const PostCard = memo(function PostCard({
                     )}
                 </div>
 
-                {/* Resource link */}
-                {p.type === "resource" && p.url && (
-                    <a
-                        href={p.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400 text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors"
-                    >
-                        <ExternalLink size={14} className="shrink-0" />
-                        <span className="truncate">{p.url}</span>
-                    </a>
+                {/* Resource URL link (only when no file attached) */}
+                {post.type === "resource" &&
+                    post.url &&
+                    post.sourceType !== "file" && (
+                        <a
+                            href={post.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400 text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors"
+                        >
+                            <ExternalLink size={14} className="shrink-0" />
+                            <span className="truncate">{post.url}</span>
+                        </a>
+                    )}
+
+                {/* ── File attachment card ── */}
+                {hasFile && (
+                    <FileAttachmentCard
+                        fileId={post.fileId}
+                        mimeType={post.mimeType}
+                        fileName={post.fileName}
+                        fileType={fileType}
+                        onPreview={onPreview}
+                    />
                 )}
 
                 {/* Reaction chips */}
                 {totalReactions > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                         {EMOJIS.filter(
-                            e => (p.reactions[e]?.length ?? 0) > 0
+                            e => (post.reactions[e]?.length ?? 0) > 0
                         ).map(e => (
                             <button
                                 key={e}
-                                onClick={() => onReact(p.$id, p.reactions, e)}
+                                onClick={() =>
+                                    onReact(post.$id, post.reactions, e)
+                                }
                                 className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-sm border transition-all ${
-                                    p.reactions[e]?.includes(currentUserId)
+                                    post.reactions[e]?.includes(currentUserId)
                                         ? "bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700"
                                         : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300"
                                 }`}
                             >
                                 {e}
                                 <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                                    {p.reactions[e].length}
+                                    {post.reactions[e].length}
                                 </span>
                             </button>
                         ))}
@@ -552,7 +676,6 @@ const PostCard = memo(function PostCard({
                         >
                             {myEmoji ?? "👍"} React
                         </button>
-
                         <AnimatePresence>
                             {showEmoji && (
                                 <motion.div
@@ -565,7 +688,11 @@ const PostCard = memo(function PostCard({
                                         <button
                                             key={e}
                                             onClick={() => {
-                                                onReact(p.$id, p.reactions, e);
+                                                onReact(
+                                                    post.$id,
+                                                    post.reactions,
+                                                    e
+                                                );
                                                 setShowEmoji(false);
                                             }}
                                             className="text-xl hover:scale-125 transition-transform p-0.5"
@@ -584,14 +711,14 @@ const PostCard = memo(function PostCard({
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     >
                         <MessageCircle size={14} />
-                        {p.commentCount > 0
-                            ? `${p.commentCount} comment${p.commentCount !== 1 ? "s" : ""}`
+                        {post.commentCount > 0
+                            ? `${post.commentCount} comment${post.commentCount !== 1 ? "s" : ""}`
                             : "Comment"}
                     </button>
                 </div>
             </div>
 
-            {/* Comments */}
+            {/* Comments section */}
             <AnimatePresence initial={false}>
                 {showComments && (
                     <motion.div
@@ -602,7 +729,7 @@ const PostCard = memo(function PostCard({
                         className="overflow-hidden border-t border-slate-100 dark:border-slate-800"
                     >
                         <CommentsSection
-                            postId={p.$id}
+                            postId={post.$id}
                             departmentId={departmentId}
                             currentUserId={currentUserId}
                             currentUserName={currentUserName}
@@ -619,7 +746,122 @@ const PostCard = memo(function PostCard({
     );
 });
 
-// ── CommentsSection ──────────────────────────────
+// ── FileAttachmentCard ─────────────────────────────────────────────────────────
+// Standalone component — takes explicit props, no chance of prop shadowing
+
+function FileAttachmentCard({
+    fileId,
+    mimeType,
+    fileName,
+    fileType,
+    onPreview
+}) {
+    const viewUrl = getFileViewUrl(fileId);
+    const downloadUrl = getFileDownloadUrl(fileId);
+
+    const handlePreview = () =>
+        onPreview({ fileId, mimeType, fileName: fileName || "Attachment" });
+
+    if (fileType === "image") {
+        return (
+            <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700">
+                {/* Clickable image */}
+                <button
+                    type="button"
+                    onClick={handlePreview}
+                    className="w-full block"
+                >
+                    <img
+                        src={viewUrl}
+                        alt={fileName || "Image attachment"}
+                        className="w-full max-h-72 object-cover hover:opacity-95 transition-opacity"
+                        loading="lazy"
+                    />
+                </button>
+                {/* Footer bar */}
+                <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800 flex items-center gap-2">
+                    <Image size={13} className="text-violet-500 shrink-0" />
+                    <span className="text-xs text-slate-500 dark:text-slate-400 truncate flex-1">
+                        {fileName || "Image"}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={handlePreview}
+                        className="p-1 rounded text-slate-400 hover:text-primary-700 dark:hover:text-primary-400 transition-colors"
+                        title="View full size"
+                    >
+                        <Eye size={13} />
+                    </button>
+                    <a
+                        href={downloadUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1 rounded text-slate-400 hover:text-primary-700 dark:hover:text-primary-400 transition-colors"
+                        title="Download"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <Download size={13} />
+                    </a>
+                </div>
+            </div>
+        );
+    }
+
+    if (fileType === "pdf") {
+        return (
+            <button
+                type="button"
+                onClick={handlePreview}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-left"
+            >
+                <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/40 flex items-center justify-center shrink-0">
+                    <FileText size={18} className="text-red-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-red-700 dark:text-red-400 truncate">
+                        {fileName || "PDF Document"}
+                    </p>
+                    <p className="text-xs text-red-600/70 dark:text-red-400/70 mt-0.5">
+                        PDF · Tap to view
+                    </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                    <div className="p-1.5 rounded-lg text-red-400">
+                        <Eye size={15} />
+                    </div>
+                    <a
+                        href={downloadUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="p-1.5 rounded-lg text-red-400 hover:text-red-600 transition-colors"
+                        title="Download"
+                    >
+                        <Download size={15} />
+                    </a>
+                </div>
+            </button>
+        );
+    }
+
+    // Fallback for other file types
+    return (
+        <a
+            href={downloadUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+        >
+            <FileText size={18} className="text-slate-500 shrink-0" />
+            <span className="text-sm font-medium text-slate-600 dark:text-slate-400 truncate flex-1">
+                {fileName || "Attachment"}
+            </span>
+            <Download size={15} className="text-slate-400 shrink-0" />
+        </a>
+    );
+}
+
+// ── CommentsSection ───────────────────────────────────────────────────────────
 
 function CommentsSection({
     postId,
@@ -729,14 +971,11 @@ function CommentsSection({
     );
 }
 
-// ── Shared Avatar component ──────────────────────
+// ── Avatar ────────────────────────────────────────────────────────────────────
 
 function Avatar({ name, size = "sm" }) {
     const initials = (name ?? "?")[0].toUpperCase();
-    const sizes = {
-        xs: "w-7 h-7 text-xs",
-        sm: "w-9 h-9 text-sm"
-    };
+    const sizes = { xs: "w-7 h-7 text-xs", sm: "w-9 h-9 text-sm" };
     return (
         <div
             className={`${sizes[size]} rounded-full bg-gradient-to-br from-primary-700 to-cyan-500 flex items-center justify-center shrink-0`}

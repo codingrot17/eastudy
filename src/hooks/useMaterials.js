@@ -42,6 +42,32 @@ export function useMaterials(departmentId) {
                     ...prev.filter(m => m.$id !== doc.$id)
                 ]);
             }
+            if (event.events.some(e => e.includes("create"))) {
+                setMaterials(prev => [
+                    doc,
+                    ...prev.filter(m => m.$id !== doc.$id)
+                ]);
+
+                // Fire push notification
+                if (
+                    "serviceWorker" in navigator &&
+                    Notification.permission === "granted"
+                ) {
+                    navigator.serviceWorker.ready
+                        .then(reg => {
+                            reg.showNotification("📂 New Material Added", {
+                                body: `${doc.title} · ${doc.category}`,
+                                icon: "/favicon.svg",
+                                badge: "/favicon.svg",
+                                tag: `material-${doc.$id}`,
+                                renotify: true,
+                                vibrate: [200, 100, 200],
+                                data: { url: "/dashboard/student" }
+                            }).catch(() => {});
+                        })
+                        .catch(() => {});
+                }
+            }
             if (event.events.some(e => e.includes("delete"))) {
                 setMaterials(prev => prev.filter(m => m.$id !== doc.$id));
             }

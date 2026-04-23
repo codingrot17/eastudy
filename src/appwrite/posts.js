@@ -11,7 +11,16 @@ function parsePost(doc) {
     try {
         reactions = JSON.parse(doc.reactions || "{}");
     } catch {}
-    return { ...doc, reactions };
+
+    return {
+        ...doc,
+        reactions,
+        // Normalise file fields so PostCard never sees undefined
+        fileId: doc.fileId ?? null,
+        mimeType: doc.mimeType ?? null,
+        fileName: doc.fileName ?? null,
+        sourceType: doc.sourceType ?? "none"
+    };
 }
 
 // ── Posts ────────────────────────────────────────
@@ -32,20 +41,39 @@ export async function createPost({
     authorRole,
     type,
     content,
-    url = null
+    url = null,
+    // File attachment fields — always send explicitly even if null
+    fileId = null,
+    mimeType = null,
+    fileName = null,
+    sourceType = "none"
 }) {
-    return await databases.createDocument(DB_ID, POSTS_ID, ID.unique(), {
+    // Build the payload — Appwrite rejects undefined values so
+    // we always send null for optional fields
+    const payload = {
         departmentId,
         authorId,
         authorName,
         authorRole,
         type,
         content,
-        url,
         reactions: "{}",
         commentCount: 0,
-        pinned: false
-    });
+        pinned: false,
+        // Always include these, even as null
+        url: url ?? null,
+        fileId: fileId ?? null,
+        mimeType: mimeType ?? null,
+        fileName: fileName ?? null,
+        sourceType: sourceType ?? "none"
+    };
+
+    return await databases.createDocument(
+        DB_ID,
+        POSTS_ID,
+        ID.unique(),
+        payload
+    );
 }
 
 export async function deletePost(postId) {
@@ -58,22 +86,9 @@ export async function pinPost(postId, pinned) {
 
 /**
  * toggleReaction — safe concurrent version.
- *
- * RACE CONDITION PROBLEM (original):
- * User A and User B both react at the same millisecond.
- * Both read reactions = {}, both write { "👍": ["A"] } or { "👍": ["B"] }.
- * One overwrites the other — a reaction is silently lost.
- *
- * FIX:
- * We re-fetch the latest reactions from Appwrite right before writing.
- * This shrinks the race window to near-zero for typical mobile usage
- * (true atomic ops would require Appwrite Functions, which is overkill here).
- *
- * The optimistic update in usePosts.js still runs immediately for UX,
- * and the real-time subscription corrects it within ~200ms.
+ * Re-fetches latest reactions before writing to minimize race conditions.
  */
 export async function toggleReaction(postId, emoji, userId) {
-    // Always read fresh before writing to minimize race window
     const fresh = await databases.getDocument(DB_ID, POSTS_ID, postId);
     let reactions = {};
     try {
@@ -137,7 +152,6 @@ export async function createComment({
 export async function deleteComment(commentId, postId) {
     await databases.deleteDocument(DB_ID, COMMENTS_ID, commentId);
 
-    // Decrement commentCount — best-effort, non-blocking
     databases
         .getDocument(DB_ID, POSTS_ID, postId)
         .then(post =>
