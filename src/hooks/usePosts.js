@@ -9,6 +9,7 @@ import {
     getComments,
     createComment,
     deleteComment,
+    parsePost,
     POSTS_ID,
     COMMENTS_ID
 } from "../appwrite/posts";
@@ -40,18 +41,12 @@ export function usePosts(departmentId) {
         const channel = `databases.${DB_ID}.collections.${POSTS_ID}.documents`;
         const unsub = client.subscribe(channel, event => {
             const doc = event.payload;
-            // Guard: only process events for this department
             if (doc.departmentId !== departmentId) return;
 
-            let parsed;
-            try {
-                parsed = {
-                    ...doc,
-                    reactions: JSON.parse(doc.reactions || "{}")
-                };
-            } catch {
-                parsed = { ...doc, reactions: {} };
-            }
+            // Always normalise through parsePost — handles reactions string→object
+            // AND file fields null→defaults. Without this, real-time events
+            // delivered raw Appwrite docs straight into state.
+            const parsed = parsePost(doc);
 
             if (event.events.some(e => e.includes("create"))) {
                 setPosts(prev =>
@@ -82,7 +77,11 @@ export function usePosts(departmentId) {
         authorRole,
         type,
         content,
-        url
+        url,
+        fileId,
+        mimeType,
+        fileName,
+        sourceType
     }) => {
         return await createPost({
             departmentId,
@@ -91,7 +90,11 @@ export function usePosts(departmentId) {
             authorRole,
             type,
             content,
-            url
+            url,
+            fileId,
+            mimeType,
+            fileName,
+            sourceType
         });
     };
 
@@ -105,17 +108,21 @@ export function usePosts(departmentId) {
     };
 
     /**
-     * react — optimistic UI + safe server write.
+     * react — optimistic UI with server reconciliation.
      *
-     * We update local state immediately for snappy UX, then fire the
-     * server write. The real-time subscription will receive the server's
-     * confirmed state and reconcile within ~200ms.
+     * 1. Apply optimistic update immediately for snappy UX.
+     * 2. Call toggleReaction which re-fetches server state before writing
+     *    (avoids clobbering concurrent reactions from other users).
+     * 3. On success: apply the server-confirmed reactions object to state
+     *    so local state exactly matches what was persisted.
+     * 4. On failure: revert the optimistic update.
      *
-     * Note: toggleReaction now re-fetches fresh data server-side before
-     * writing, so concurrent reactions from multiple users are safe.
+     * This fixes the bug where reactions disappeared on refresh:
+     * the optimistic object was correct but if the server write failed
+     * silently the DB was never updated, so refresh showed no reaction.
      */
     const react = async (postId, currentReactions, emoji, userId) => {
-        // Optimistic update
+        // Step 1 — optimistic update
         const optimistic = { ...currentReactions };
         if (!optimistic[emoji]) optimistic[emoji] = [];
         const idx = optimistic[emoji].indexOf(userId);
@@ -125,17 +132,27 @@ export function usePosts(departmentId) {
             optimistic[emoji] = optimistic[emoji].filter(id => id !== userId);
             if (optimistic[emoji].length === 0) delete optimistic[emoji];
         }
+
         setPosts(prev =>
             prev.map(p =>
                 p.$id === postId ? { ...p, reactions: optimistic } : p
             )
         );
 
-        // Server write — real-time will correct if needed
+        // Step 2 — server write (re-fetches latest before writing)
         try {
-            await toggleReaction(postId, emoji, userId);
+            const serverReactions = await toggleReaction(postId, emoji, userId);
+
+            // Step 3 — reconcile with confirmed server state
+            // This ensures what's in state exactly matches the DB,
+            // so a refresh shows the same value.
+            setPosts(prev =>
+                prev.map(p =>
+                    p.$id === postId ? { ...p, reactions: serverReactions } : p
+                )
+            );
         } catch (err) {
-            // Revert optimistic update on failure
+            // Step 4 — revert on failure
             console.warn("[usePosts] Reaction failed:", err?.message);
             setPosts(prev =>
                 prev.map(p =>

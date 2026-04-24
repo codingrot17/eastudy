@@ -6,16 +6,23 @@ export const COMMENTS_ID = import.meta.env.VITE_APPWRITE_COMMENTS_COLLECTION_ID;
 
 // ── Helpers ─────────────────────────────────────
 
-function parsePost(doc) {
+export function parsePost(doc) {
     let reactions = {};
     try {
-        reactions = JSON.parse(doc.reactions || "{}");
-    } catch {}
+        // Appwrite stores reactions as a JSON string.
+        // After an optimistic update the value may already be a parsed
+        // object — handle both cases defensively.
+        reactions =
+            typeof doc.reactions === "string"
+                ? JSON.parse(doc.reactions || "{}")
+                : (doc.reactions ?? {});
+    } catch {
+        reactions = {};
+    }
 
     return {
         ...doc,
         reactions,
-        // Normalise file fields so PostCard never sees undefined
         fileId: doc.fileId ?? null,
         mimeType: doc.mimeType ?? null,
         fileName: doc.fileName ?? null,
@@ -42,14 +49,11 @@ export async function createPost({
     type,
     content,
     url = null,
-    // File attachment fields — always send explicitly even if null
     fileId = null,
     mimeType = null,
     fileName = null,
     sourceType = "none"
 }) {
-    // Build the payload — Appwrite rejects undefined values so
-    // we always send null for optional fields
     const payload = {
         departmentId,
         authorId,
@@ -60,11 +64,11 @@ export async function createPost({
         reactions: "{}",
         commentCount: 0,
         pinned: false,
-        // Always include these, even as null
         url: url ?? null,
         fileId: fileId ?? null,
         mimeType: mimeType ?? null,
         fileName: fileName ?? null,
+        // Always a real string — never null — so Appwrite never stores null
         sourceType: sourceType ?? "none"
     };
 
@@ -85,15 +89,25 @@ export async function pinPost(postId, pinned) {
 }
 
 /**
- * toggleReaction — safe concurrent version.
- * Re-fetches latest reactions before writing to minimize race conditions.
+ * toggleReaction
+ *
+ * Re-fetches the latest reactions before writing to avoid race conditions.
+ * Returns the new reactions OBJECT so usePosts can reconcile the
+ * optimistic state with server truth after the write succeeds.
+ * Throws on failure so usePosts can revert the optimistic update.
  */
 export async function toggleReaction(postId, emoji, userId) {
     const fresh = await databases.getDocument(DB_ID, POSTS_ID, postId);
+
     let reactions = {};
     try {
-        reactions = JSON.parse(fresh.reactions || "{}");
-    } catch {}
+        reactions =
+            typeof fresh.reactions === "string"
+                ? JSON.parse(fresh.reactions || "{}")
+                : (fresh.reactions ?? {});
+    } catch {
+        reactions = {};
+    }
 
     if (!reactions[emoji]) reactions[emoji] = [];
     const idx = reactions[emoji].indexOf(userId);
@@ -104,9 +118,12 @@ export async function toggleReaction(postId, emoji, userId) {
         if (reactions[emoji].length === 0) delete reactions[emoji];
     }
 
+    // Must write a JSON string — Appwrite attribute is type String
     await databases.updateDocument(DB_ID, POSTS_ID, postId, {
         reactions: JSON.stringify(reactions)
     });
+
+    // Return the object so the caller can sync optimistic → server state
     return reactions;
 }
 
@@ -136,7 +153,6 @@ export async function createComment({
         { postId, departmentId, authorId, authorName, authorRole, content }
     );
 
-    // Increment commentCount — best-effort, non-blocking
     databases
         .getDocument(DB_ID, POSTS_ID, postId)
         .then(post =>
