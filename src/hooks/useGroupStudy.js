@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { client, DB_ID } from "../appwrite/config";
 import {
     getSessions,
@@ -9,11 +9,14 @@ import {
     deleteSession,
     GROUP_STUDY_ID
 } from "../appwrite/groupStudy";
+import { fireNotif } from "../utils/notify";
 
 export function useGroupStudy(departmentId) {
     const [sessions, setSessions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    // Don't notify on first load — only for sessions created after mount
+    const initialLoadDone = useRef(false);
 
     const fetch = useCallback(async () => {
         if (!departmentId) return;
@@ -21,6 +24,7 @@ export function useGroupStudy(departmentId) {
         try {
             const docs = await getSessions(departmentId);
             setSessions(docs);
+            initialLoadDone.current = true;
         } catch (err) {
             setError(err.message);
         } finally {
@@ -53,7 +57,27 @@ export function useGroupStudy(departmentId) {
                     const without = prev.filter(s => s.$id !== parsed.$id);
                     return sortSessions([parsed, ...without]);
                 });
+
+                // Notify about new study session (after initial load)
+                if (initialLoadDone.current) {
+                    const dateStr = parsed.date
+                        ? new Date(
+                              parsed.date + "T00:00:00"
+                          ).toLocaleDateString("en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric"
+                          })
+                        : "";
+                    fireNotif({
+                        title: "📚 New Study Session",
+                        body: `${parsed.title} — ${dateStr} at ${parsed.time || "TBD"} · ${parsed.location || ""}`,
+                        tag: `group-study-${parsed.$id}`,
+                        url: "/dashboard/student"
+                    });
+                }
             }
+
             if (event.events.some(e => e.includes("update"))) {
                 setSessions(prev =>
                     sortSessions(
@@ -61,6 +85,7 @@ export function useGroupStudy(departmentId) {
                     )
                 );
             }
+
             if (event.events.some(e => e.includes("delete"))) {
                 setSessions(prev => prev.filter(s => s.$id !== doc.$id));
             }
@@ -107,6 +132,6 @@ function sortSessions(docs) {
     return [...docs].sort((a, b) => {
         if (a.status === "cancelled" && b.status !== "cancelled") return 1;
         if (a.status !== "cancelled" && b.status === "cancelled") return -1;
-        return a.date.localeCompare(b.date);
+        return (a.date || "").localeCompare(b.date || "");
     });
 }

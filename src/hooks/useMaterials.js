@@ -7,6 +7,7 @@ import {
     MATERIALS_ID
 } from "../appwrite/materials";
 import { deleteFile } from "../appwrite/storage";
+import { fireNotif } from "../utils/notify";
 
 export function useMaterials(departmentId) {
     const [materials, setMaterials] = useState([]);
@@ -41,33 +42,16 @@ export function useMaterials(departmentId) {
                     doc,
                     ...prev.filter(m => m.$id !== doc.$id)
                 ]);
-            }
-            if (event.events.some(e => e.includes("create"))) {
-                setMaterials(prev => [
-                    doc,
-                    ...prev.filter(m => m.$id !== doc.$id)
-                ]);
 
-                // Fire push notification
-                if (
-                    "serviceWorker" in navigator &&
-                    Notification.permission === "granted"
-                ) {
-                    navigator.serviceWorker.ready
-                        .then(reg => {
-                            reg.showNotification("📂 New Material Added", {
-                                body: `${doc.title} · ${doc.category}`,
-                                icon: "/favicon.svg",
-                                badge: "/favicon.svg",
-                                tag: `material-${doc.$id}`,
-                                renotify: true,
-                                vibrate: [200, 100, 200],
-                                data: { url: "/dashboard/student" }
-                            }).catch(() => {});
-                        })
-                        .catch(() => {});
-                }
+                // Single notification — no duplicate
+                fireNotif({
+                    title: "📂 New Material Added",
+                    body: `${doc.title} · ${doc.category}`,
+                    tag: `material-${doc.$id}`,
+                    url: "/dashboard/student"
+                });
             }
+
             if (event.events.some(e => e.includes("delete"))) {
                 setMaterials(prev => prev.filter(m => m.$id !== doc.$id));
             }
@@ -100,24 +84,16 @@ export function useMaterials(departmentId) {
             fileName,
             sourceType
         });
-        // Real-time subscription will update the list
     };
 
     /**
      * Delete a material and clean up its storage file if one exists.
-     * Storage deletion is non-blocking — a failed storage delete won't
-     * surface as an error to the user (the DB doc is the source of truth).
      */
     const remove = async id => {
-        // Capture material before removing from state so we have fileId
         const material = materials.find(m => m.$id === id);
-
         await deleteMaterial(id);
-
-        // Optimistic local removal (real-time will also fire)
         setMaterials(prev => prev.filter(m => m.$id !== id));
 
-        // Clean up storage file — non-blocking, best-effort
         if (material?.fileId) {
             deleteFile(material.fileId).catch(err => {
                 console.warn(

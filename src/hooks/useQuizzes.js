@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { databases, DB_ID, USERS_ID } from "../appwrite/config";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { client, databases, DB_ID, USERS_ID } from "../appwrite/config";
 import { Query } from "appwrite";
 import {
     getQuizzes,
@@ -9,8 +9,10 @@ import {
     submitAttempt,
     getMyAttempt,
     deleteAttempt,
-    getQuizAttempts
+    getQuizAttempts,
+    QUIZZES_ID
 } from "../appwrite/quizzes";
+import { fireNotif } from "../utils/notify";
 
 // ── Shared list hook ─────────────────────────────
 
@@ -18,13 +20,22 @@ export function useQuizzes(departmentId, { repMode = false } = {}) {
     const [quizzes, setQuizzes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    // Track which quizzes were already published on first load so we don't
+    // fire a stale notification for quizzes published before the tab opened.
+    const initialPublished = useRef(null);
 
     const fetch = useCallback(async () => {
         if (!departmentId) return;
         setLoading(true);
         try {
             const docs = await getQuizzes(departmentId);
-            setQuizzes(repMode ? docs : docs.filter(q => q.published));
+            const filtered = repMode ? docs : docs.filter(q => q.published);
+            setQuizzes(filtered);
+            if (initialPublished.current === null) {
+                initialPublished.current = new Set(
+                    docs.filter(q => q.published).map(q => q.$id)
+                );
+            }
         } catch (err) {
             setError(err.message);
         } finally {
@@ -35,6 +46,68 @@ export function useQuizzes(departmentId, { repMode = false } = {}) {
     useEffect(() => {
         fetch();
     }, [fetch]);
+
+    // Real-time subscription — notify students when a quiz is published
+    useEffect(() => {
+        if (!departmentId || !QUIZZES_ID) return;
+
+        const channel = `databases.${DB_ID}.collections.${QUIZZES_ID}.documents`;
+        const unsub = client.subscribe(channel, event => {
+            const doc = event.payload;
+            if (doc.departmentId !== departmentId) return;
+
+            const isCreate = event.events.some(e => e.includes("create"));
+            const isUpdate = event.events.some(e => e.includes("update"));
+            const isDelete = event.events.some(e => e.includes("delete"));
+
+            if (isCreate || isUpdate) {
+                const wasPublished =
+                    initialPublished.current?.has(doc.$id) ?? false;
+                const isNowPublished = doc.published;
+
+                // Fire notification only when a quiz just flipped to published
+                if (!repMode && isNowPublished && !wasPublished) {
+                    fireNotif({
+                        title: "📝 New Quiz Available",
+                        body: `${doc.title} — tap to take it now`,
+                        tag: `quiz-published-${doc.$id}`,
+                        url: "/dashboard/student"
+                    });
+                }
+
+                if (isNowPublished) {
+                    initialPublished.current?.add(doc.$id);
+                } else {
+                    initialPublished.current?.delete(doc.$id);
+                }
+
+                if (isCreate) {
+                    if (repMode || doc.published) {
+                        setQuizzes(prev => [
+                            doc,
+                            ...prev.filter(q => q.$id !== doc.$id)
+                        ]);
+                    }
+                } else {
+                    setQuizzes(prev => {
+                        const updated = prev.map(q =>
+                            q.$id === doc.$id ? { ...q, ...doc } : q
+                        );
+                        return repMode
+                            ? updated
+                            : updated.filter(q => q.published);
+                    });
+                }
+            }
+
+            if (isDelete) {
+                setQuizzes(prev => prev.filter(q => q.$id !== doc.$id));
+                initialPublished.current?.delete(doc.$id);
+            }
+        });
+
+        return () => unsub();
+    }, [departmentId, repMode]);
 
     const create = async data => {
         const quiz = await createQuiz({ ...data, departmentId });
@@ -76,15 +149,6 @@ export function useQuizzes(departmentId, { repMode = false } = {}) {
 
 // ── Single attempt hook ──────────────────────────
 
-/**
- * useQuizAttempt
- *
- * - Checks if student has an existing attempt
- * - If the quiz was updated AFTER the attempt was submitted (quizVersion mismatch),
- *   the old attempt is automatically cleared so the student must retake
- * - retake() lets a student manually delete their attempt and try again
- * - submit() stores the new attempt with the current quiz version
- */
 export function useQuizAttempt(quizId, studentId, quizUpdatedAt) {
     const [attempt, setAttempt] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -97,9 +161,7 @@ export function useQuizAttempt(quizId, studentId, quizUpdatedAt) {
         }
         try {
             const a = await getMyAttempt(quizId, studentId);
-
             if (a && quizUpdatedAt && a.quizVersion !== quizUpdatedAt) {
-                // Quiz was edited after this attempt — delete stale attempt silently
                 await deleteAttempt(a.$id);
                 setAttempt(null);
             } else {
@@ -137,10 +199,6 @@ export function useQuizAttempt(quizId, studentId, quizUpdatedAt) {
         return result;
     };
 
-    /**
-     * Manually retake — deletes the existing attempt and resets state.
-     * The QuizRunner will re-mount and the student can answer again.
-     */
     const retake = async () => {
         if (!attempt) return;
         setRetaking(true);
@@ -157,12 +215,6 @@ export function useQuizAttempt(quizId, studentId, quizUpdatedAt) {
 
 // ── Results hook with name resolution ───────────
 
-/**
- * useQuizResults
- *
- * Fetches all attempts for a quiz, then resolves each studentId to a
- * real name + email by querying the users collection.
- */
 export function useQuizResults(quizId) {
     const [attempts, setAttempts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -178,22 +230,18 @@ export function useQuizResults(quizId) {
                     return;
                 }
 
-                // Deduplicate studentIds to minimise Appwrite queries
                 const uniqueIds = [...new Set(raw.map(a => a.studentId))];
 
-                // Fetch user profiles in one batched query (up to 100)
                 const res = await databases.listDocuments(DB_ID, USERS_ID, [
                     Query.equal("authId", uniqueIds),
                     Query.limit(100)
                 ]);
 
-                // Build lookup map: authId → { name, email }
                 const profileMap = {};
                 res.documents.forEach(u => {
                     profileMap[u.authId] = { name: u.name, email: u.email };
                 });
 
-                // Enrich each attempt
                 const enriched = raw.map(a => ({
                     ...a,
                     studentName: profileMap[a.studentId]?.name || "Unknown",
