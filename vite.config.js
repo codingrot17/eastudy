@@ -3,6 +3,11 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
     plugins: [react()],
+    
+    define: {
+        // Polyfill for environments where globalThis.crypto is undefined
+        global: "globalThis"
+    },
 
     build: {
         chunkSizeWarningLimit: 600,

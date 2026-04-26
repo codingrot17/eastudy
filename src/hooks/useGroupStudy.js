@@ -17,18 +17,27 @@ export function useGroupStudy(departmentId) {
     const [error, setError] = useState(null);
     // Don't notify on first load — only for sessions created after mount
     const initialLoadDone = useRef(false);
+    const mounted = useRef(true);
+
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+        }; // ← cleanup
+    }, []);
 
     const fetch = useCallback(async () => {
         if (!departmentId) return;
-        setLoading(true);
+        if (mounted.current) setLoading(true);
         try {
             const docs = await getSessions(departmentId);
+            if (!mounted.current) return;
             setSessions(docs);
             initialLoadDone.current = true;
         } catch (err) {
-            setError(err.message);
+            if (mounted.current) setError(err.message);
         } finally {
-            setLoading(false);
+            if (mounted.current) setLoading(false);
         }
     }, [departmentId]);
 
@@ -39,6 +48,7 @@ export function useGroupStudy(departmentId) {
 
         const channel = `databases.${DB_ID}.collections.${GROUP_STUDY_ID}.documents`;
         const unsub = client.subscribe(channel, event => {
+            if (!mounted.current) return;
             const doc = event.payload;
             if (doc.departmentId !== departmentId) return;
 
@@ -50,6 +60,22 @@ export function useGroupStudy(departmentId) {
                 };
             } catch {
                 parsed = { ...doc, attendees: [] };
+            }
+
+            function parseSession(doc) {
+                let attendees = [];
+                try {
+                    const raw = JSON.parse(doc.attendees || "[]");
+                    // Filter out null/non-object entries
+                    attendees = Array.isArray(raw)
+                        ? raw.filter(
+                              a => a && typeof a === "object" && a.authId
+                          )
+                        : [];
+                } catch {
+                    attendees = [];
+                }
+                return { ...doc, attendees };
             }
 
             if (event.events.some(e => e.includes("create"))) {

@@ -146,14 +146,19 @@ export const getDepartmentById = async id => {
 };
 
 // ── getDepartmentStudents — not cached (list changes as students join) ─
-
 export const getDepartmentStudents = async departmentId => {
-    const res = await databases.listDocuments(DB_ID, USERS_ID, [
-        Query.equal("departmentId", departmentId),
-        Query.equal("role", "student"),
-        Query.limit(100)
-    ]);
-    return res.documents;
+    return cachedFetch(
+        `dept:students:${departmentId}`,
+        async () => {
+            const res = await databases.listDocuments(DB_ID, USERS_ID, [
+                Query.equal("departmentId", departmentId),
+                Query.equal("role", "student"),
+                Query.limit(100)
+            ]);
+            return res.documents;
+        },
+        60_000 // 1 minute cache
+    );
 };
 
 // ── Assistant rep operations ─────────────────────

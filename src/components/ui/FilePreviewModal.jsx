@@ -5,7 +5,8 @@ import {
     ExternalLink,
     FileText,
     Image,
-    Loader2
+    Loader2,
+    AlertCircle
 } from "lucide-react";
 import { useState } from "react";
 import {
@@ -19,7 +20,7 @@ import {
  *
  * Full-screen modal for previewing uploaded files.
  * - Images: rendered as <img>
- * - PDFs: rendered in an <iframe> (works in Kiwi Browser on Android)
+ * - PDFs: rendered in an <iframe>; falls back to download link if iframe errors
  * - Other: fallback with download button
  *
  * Props:
@@ -28,6 +29,8 @@ import {
  */
 export default function FilePreviewModal({ file, onClose }) {
     const [iframeLoading, setIframeLoading] = useState(true);
+    const [imgError, setImgError] = useState(false);
+    const [iframeError, setIframeError] = useState(false);
 
     if (!file) return null;
 
@@ -36,9 +39,11 @@ export default function FilePreviewModal({ file, onClose }) {
     const type = getFileType(file.mimeType);
 
     const handleBackdropClick = e => {
-        // Only close when clicking the backdrop itself, not the content
         if (e.target === e.currentTarget) onClose();
     };
+
+    // Reset error states when a new file is opened
+    // (handled naturally since component unmounts when file=null)
 
     return (
         <AnimatePresence>
@@ -55,7 +60,6 @@ export default function FilePreviewModal({ file, onClose }) {
                     className="flex items-center justify-between px-4 py-3 bg-slate-950/90 backdrop-blur-sm border-b border-white/10 shrink-0"
                     onClick={e => e.stopPropagation()}
                 >
-                    {/* File name + type badge */}
                     <div className="flex items-center gap-2.5 min-w-0 mr-3">
                         {type === "image" ? (
                             <Image
@@ -69,7 +73,7 @@ export default function FilePreviewModal({ file, onClose }) {
                             />
                         )}
                         <p className="text-sm font-medium text-white truncate">
-                            {file.fileName}
+                            {file.fileName || "File"}
                         </p>
                         <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-white/10 text-slate-300 shrink-0">
                             {type === "pdf"
@@ -80,7 +84,6 @@ export default function FilePreviewModal({ file, onClose }) {
                         </span>
                     </div>
 
-                    {/* Actions */}
                     <div className="flex items-center gap-2 shrink-0">
                         <a
                             href={downloadUrl}
@@ -117,20 +120,30 @@ export default function FilePreviewModal({ file, onClose }) {
                     className="flex-1 overflow-hidden flex items-center justify-center p-3 sm:p-5"
                     onClick={e => e.stopPropagation()}
                 >
-                    {type === "image" && (
+                    {/* Image preview */}
+                    {type === "image" && !imgError && (
                         <motion.img
                             initial={{ opacity: 0, scale: 0.97 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.22 }}
                             src={viewUrl}
-                            alt={file.fileName}
+                            alt={file.fileName || "Image"}
                             className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
+                            onError={() => setImgError(true)}
                         />
                     )}
 
-                    {type === "pdf" && (
+                    {/* Image load error */}
+                    {type === "image" && imgError && (
+                        <ImageError
+                            viewUrl={viewUrl}
+                            downloadUrl={downloadUrl}
+                        />
+                    )}
+
+                    {/* PDF preview */}
+                    {type === "pdf" && !iframeError && (
                         <div className="relative w-full h-full rounded-xl overflow-hidden">
-                            {/* Loading spinner shown while iframe loads */}
                             {iframeLoading && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-100 dark:bg-slate-800 rounded-xl">
                                     <Loader2
@@ -144,14 +157,28 @@ export default function FilePreviewModal({ file, onClose }) {
                             )}
                             <iframe
                                 src={viewUrl}
-                                title={file.fileName}
+                                title={file.fileName || "PDF"}
                                 className="w-full h-full bg-white rounded-xl"
                                 style={{ minHeight: "65vh" }}
                                 onLoad={() => setIframeLoading(false)}
+                                onError={() => {
+                                    setIframeLoading(false);
+                                    setIframeError(true);
+                                }}
                             />
                         </div>
                     )}
 
+                    {/* PDF iframe failed — show open/download fallback */}
+                    {type === "pdf" && iframeError && (
+                        <PDFError
+                            viewUrl={viewUrl}
+                            downloadUrl={downloadUrl}
+                            fileName={file.fileName}
+                        />
+                    )}
+
+                    {/* Other file types */}
                     {type === "other" && (
                         <motion.div
                             initial={{ opacity: 0, y: 12 }}
@@ -166,7 +193,7 @@ export default function FilePreviewModal({ file, onClose }) {
                             </div>
                             <div>
                                 <p className="font-bold text-white mb-1">
-                                    {file.fileName}
+                                    {file.fileName || "File"}
                                 </p>
                                 <p className="text-sm text-slate-400">
                                     Preview not available for this file type.
@@ -196,5 +223,83 @@ export default function FilePreviewModal({ file, onClose }) {
                 </div>
             </motion.div>
         </AnimatePresence>
+    );
+}
+
+// ── Error fallbacks ──────────────────────────────
+
+function ImageError({ viewUrl, downloadUrl }) {
+    return (
+        <div className="flex flex-col items-center gap-5 text-center px-6">
+            <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center">
+                <AlertCircle size={28} className="text-amber-400" />
+            </div>
+            <div>
+                <p className="font-bold text-white mb-1">Couldn't load image</p>
+                <p className="text-sm text-slate-400 max-w-xs">
+                    This can happen if bucket permissions are not set to public
+                    read, or the file was deleted.
+                </p>
+            </div>
+            <div className="flex gap-3">
+                <a
+                    href={viewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-sm rounded-xl transition-colors"
+                >
+                    <ExternalLink size={15} />
+                    Open in tab
+                </a>
+                <a
+                    href={downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-primary-700 hover:bg-primary-600 text-white font-semibold text-sm rounded-xl transition-colors"
+                >
+                    <Download size={15} />
+                    Download
+                </a>
+            </div>
+        </div>
+    );
+}
+
+function PDFError({ viewUrl, downloadUrl, fileName }) {
+    return (
+        <div className="flex flex-col items-center gap-5 text-center px-6">
+            <div className="w-20 h-20 rounded-2xl bg-white/10 flex items-center justify-center">
+                <FileText size={36} className="text-red-400" />
+            </div>
+            <div>
+                <p className="font-bold text-white mb-1">
+                    {fileName || "PDF Document"}
+                </p>
+                <p className="text-sm text-slate-400 max-w-xs">
+                    PDF preview couldn't load. Open it in your browser or
+                    download it.
+                </p>
+            </div>
+            <div className="flex gap-3">
+                <a
+                    href={viewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-sm rounded-xl transition-colors"
+                >
+                    <ExternalLink size={15} />
+                    Open in browser
+                </a>
+                <a
+                    href={downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-primary-700 hover:bg-primary-600 text-white font-semibold text-sm rounded-xl transition-colors"
+                >
+                    <Download size={15} />
+                    Download PDF
+                </a>
+            </div>
+        </div>
     );
 }

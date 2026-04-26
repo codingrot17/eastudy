@@ -10,17 +10,6 @@ const MATERIALS_ID = import.meta.env.VITE_APPWRITE_MATERIALS_COLLECTION_ID;
 const USERS_ID = import.meta.env.VITE_APPWRITE_USERS_COLLECTION_ID;
 const QUIZZES_ID = import.meta.env.VITE_APPWRITE_QUIZZES_COLLECTION_ID;
 
-/**
- * useDashboardStats
- *
- * Traffic fix: instead of firing 5 parallel Appwrite queries on every
- * mount, we:
- * 1. Cache results per departmentId for 60s — repeated tab switches
- *    don't re-query Appwrite at all.
- * 2. Use Promise.allSettled instead of Promise.all — one failed query
- *    doesn't crash the entire stats load.
- * 3. Show partial results as they arrive instead of waiting for all 5.
- */
 export function useDashboardStats(departmentId) {
     const [stats, setStats] = useState({
         announcements: 0,
@@ -30,16 +19,10 @@ export function useDashboardStats(departmentId) {
         studentsRegistered: 0
     });
     const [loading, setLoading] = useState(true);
-    const mounted = useRef(true);
 
     useEffect(() => {
-        mounted.current = true;
-        return () => {
-            mounted.current = false;
-        };
-    }, []);
+        const mounted = { current: true }; // ← local object, not useRef
 
-    useEffect(() => {
         if (!departmentId) {
             setLoading(false);
             return;
@@ -47,19 +30,15 @@ export function useDashboardStats(departmentId) {
 
         const load = async () => {
             setLoading(true);
-
             const todayName = new Date().toLocaleDateString("en-US", {
                 weekday: "long"
             });
-
             const cacheKey = `stats:${departmentId}:${todayName}`;
 
             try {
                 const result = await withCache(
                     cacheKey,
                     async () => {
-                        // Promise.allSettled — partial failure is ok,
-                        // we show 0 for any collection that errors
                         const [
                             announcementsRes,
                             schedulesTodayRes,
@@ -90,7 +69,6 @@ export function useDashboardStats(departmentId) {
                                 Query.limit(1)
                             ])
                         ]);
-
                         return {
                             announcements:
                                 announcementsRes.status === "fulfilled"
@@ -115,11 +93,10 @@ export function useDashboardStats(departmentId) {
                         };
                     },
                     60
-                ); // cache for 60 seconds
+                );
 
                 if (mounted.current) setStats(result);
             } catch (err) {
-                // Even the cache wrapper failed — show zeros, don't crash
                 console.warn("[useDashboardStats] Load failed:", err?.message);
             } finally {
                 if (mounted.current) setLoading(false);
@@ -127,6 +104,9 @@ export function useDashboardStats(departmentId) {
         };
 
         load();
+        return () => {
+            mounted.current = false;
+        };
     }, [departmentId]);
 
     return { stats, loading };

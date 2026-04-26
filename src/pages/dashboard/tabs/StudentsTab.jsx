@@ -14,6 +14,8 @@ import {
     getDepartmentStudents,
     getAssistantProfile
 } from "../../../appwrite/department";
+import { invalidate } from "../../../appwrite/appwriteCache";
+
 
 export default function StudentsTab({ department }) {
     const [students, setStudents] = useState([]);

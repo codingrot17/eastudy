@@ -17,10 +17,10 @@ export default function PwaStart() {
     const navigate = useNavigate();
     const { isHydrated, user, profile } = useAuthStore();
 
-    // Primary route — fires once hydration completes
+    // Two separate effects:
+    // 1. Primary routing (watches isHydrated)
     useEffect(() => {
         if (!isHydrated) return;
-
         if (user && profile) {
             navigate(`/dashboard/${profile.role}`, { replace: true });
         } else {
@@ -28,21 +28,14 @@ export default function PwaStart() {
         }
     }, [isHydrated, user, profile, navigate]);
 
-    // Fallback timeout — if hydration is still pending after 8s,
-    // assume network failure and send to login
+    // 2. Timeout (runs once on mount only)
     useEffect(() => {
         const timeout = setTimeout(() => {
-            if (!isHydrated) {
-                console.warn(
-                    "[PwaStart] Hydration timeout — redirecting to login"
-                );
-                navigate("/auth/login", { replace: true });
-            }
+            navigate("/auth/login", { replace: true });
         }, 8000);
-
         return () => clearTimeout(timeout);
-    }, [isHydrated, navigate]);
-
+    }, []); // ← empty deps, runs once
+    
     return (
         <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-[#1E1B4B]">
             <img src="/favicon.svg" alt="Eastudy" className="w-16 h-16" />

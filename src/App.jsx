@@ -1,5 +1,5 @@
 import { Routes, Route } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import useThemeStore from "./store/useThemeStore";
 import useAuthStore from "./store/useAuthStore";
 import PWAProvider from "./components/pwa/PWAProvider";
@@ -18,8 +18,11 @@ import PwaStart from "./pages/PwaStart";
 export default function App() {
     const init = useThemeStore(s => s.init);
     const hydrate = useAuthStore(s => s.hydrate);
+    const booted = useRef(false);
 
     useEffect(() => {
+        if (booted.current) return;
+        booted.current = true;
         init();
         hydrate();
     }, []);

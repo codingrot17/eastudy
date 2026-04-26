@@ -97,34 +97,43 @@ export async function pinPost(postId, pinned) {
  * Throws on failure so usePosts can revert the optimistic update.
  */
 export async function toggleReaction(postId, emoji, userId) {
-    const fresh = await databases.getDocument(DB_ID, POSTS_ID, postId);
+    const attempt = async () => {
+        const fresh = await databases.getDocument(DB_ID, POSTS_ID, postId);
+        let reactions = {};
+        try {
+            reactions =
+                typeof fresh.reactions === "string"
+                    ? JSON.parse(fresh.reactions || "{}")
+                    : (fresh.reactions ?? {});
+        } catch {
+            reactions = {};
+        }
 
-    let reactions = {};
+        if (!reactions[emoji]) reactions[emoji] = [];
+        const idx = reactions[emoji].indexOf(userId);
+        if (idx === -1) {
+            reactions[emoji] = [...reactions[emoji], userId];
+        } else {
+            reactions[emoji] = reactions[emoji].filter(id => id !== userId);
+            if (reactions[emoji].length === 0) delete reactions[emoji];
+        }
+
+        await databases.updateDocument(DB_ID, POSTS_ID, postId, {
+            reactions: JSON.stringify(reactions)
+        });
+        return reactions;
+    };
+
     try {
-        reactions =
-            typeof fresh.reactions === "string"
-                ? JSON.parse(fresh.reactions || "{}")
-                : (fresh.reactions ?? {});
-    } catch {
-        reactions = {};
+        return await attempt();
+    } catch (err) {
+        // One retry on conflict/network blip
+        if (err?.code === 409 || err?.code >= 500) {
+            await new Promise(r => setTimeout(r, 300));
+            return await attempt();
+        }
+        throw err;
     }
-
-    if (!reactions[emoji]) reactions[emoji] = [];
-    const idx = reactions[emoji].indexOf(userId);
-    if (idx === -1) {
-        reactions[emoji] = [...reactions[emoji], userId];
-    } else {
-        reactions[emoji] = reactions[emoji].filter(id => id !== userId);
-        if (reactions[emoji].length === 0) delete reactions[emoji];
-    }
-
-    // Must write a JSON string — Appwrite attribute is type String
-    await databases.updateDocument(DB_ID, POSTS_ID, postId, {
-        reactions: JSON.stringify(reactions)
-    });
-
-    // Return the object so the caller can sync optimistic → server state
-    return reactions;
 }
 
 // ── Comments ─────────────────────────────────────

@@ -23,12 +23,21 @@ export function useQuizzes(departmentId, { repMode = false } = {}) {
     // Track which quizzes were already published on first load so we don't
     // fire a stale notification for quizzes published before the tab opened.
     const initialPublished = useRef(null);
+    const mounted = useRef(true);
+
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+        };
+    }, []);
 
     const fetch = useCallback(async () => {
         if (!departmentId) return;
-        setLoading(true);
+        if (mounted.current) setLoading(true);
         try {
             const docs = await getQuizzes(departmentId);
+            if (!mounted.current) return;
             const filtered = repMode ? docs : docs.filter(q => q.published);
             setQuizzes(filtered);
             if (initialPublished.current === null) {
@@ -37,9 +46,9 @@ export function useQuizzes(departmentId, { repMode = false } = {}) {
                 );
             }
         } catch (err) {
-            setError(err.message);
+            if (mounted.current) setError(err.message);
         } finally {
-            setLoading(false);
+            if (mounted.current) setLoading(false);
         }
     }, [departmentId, repMode]);
 
@@ -53,6 +62,7 @@ export function useQuizzes(departmentId, { repMode = false } = {}) {
 
         const channel = `databases.${DB_ID}.collections.${QUIZZES_ID}.documents`;
         const unsub = client.subscribe(channel, event => {
+            if (!mounted.current) return;
             const doc = event.payload;
             if (doc.departmentId !== departmentId) return;
 

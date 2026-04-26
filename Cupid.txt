@@ -1,5 +1,0 @@
-{
-"subject": "mailto: <codingrot001@gmail.com>",
-"publicKey": "BAsVMDeia9sr5CLS0a39pBsBrbRXzQw0ukXNvs-oVOPzQZnr6S--Vr87brrkg119_tR8MCbArAoFBmw0IzVJOVI",
-"privateKey": "t4r-RteIg-yXryecvvVY9mIM7T7aG-w3qvo3JZOR4zI"
-}

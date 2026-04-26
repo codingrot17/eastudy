@@ -140,12 +140,8 @@ export default function SettingsTab({ department, user }) {
             setSearchError("");
 
             // Update Zustand department so sidebar code widget stays in sync
-            useAuthStore.setState(state => ({
-                department: {
-                    ...state.department,
-                    assistantRepId: foundUser.authId
-                }
-            }));
+            const { setDepartment } = useAuthStore();
+            setDepartment({ ...department, assistantRepId: foundUser.authId });
 
             showToast(
                 "success",
@@ -175,10 +171,9 @@ export default function SettingsTab({ department, user }) {
             const removedName = assistant.name;
             setAssistant(null);
 
-            useAuthStore.setState(state => ({
-                department: { ...state.department, assistantRepId: null }
-            }));
-
+            const { setDepartment } = useAuthStore();
+            setDepartment({ ...department, assistantRepId: null });
+            
             showToast(
                 "success",
                 `${removedName} has been removed as assistant rep.`

@@ -9,13 +9,6 @@ import {
     DAYS
 } from "../appwrite/schedule";
 
-/**
- * useSchedule — fetches, subscribes real-time, and fires local push
- * notifications when the rep adds/edits a class (student-side).
- *
- * @param {string} departmentId
- * @param {{ enableNotifications?: boolean }} options
- */
 export function useSchedule(
     departmentId,
     { enableNotifications = false } = {}
@@ -24,29 +17,38 @@ export function useSchedule(
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const initialLoadDone = useRef(false);
+    const mounted = useRef(true);
 
-    // ── Fetch ───────────────────────────────────
-    const fetch = useCallback(async () => {
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+        };
+    }, []);
+
+    // ── Renamed from "fetch" to "loadEntries" to avoid TDZ conflict ──
+    const loadEntries = useCallback(async () => {
         if (!departmentId) return;
-        setLoading(true);
+        if (mounted.current) setLoading(true);
         try {
             const docs = await getSchedule(departmentId);
+            if (!mounted.current) return;
             setEntries(sortEntries(docs));
             initialLoadDone.current = true;
         } catch (err) {
-            setError(err.message);
+            if (mounted.current) setError(err.message);
         } finally {
-            setLoading(false);
+            if (mounted.current) setLoading(false);
         }
     }, [departmentId]);
 
-    // ── Real-time subscription ──────────────────
     useEffect(() => {
         if (!departmentId) return;
-        fetch();
+        loadEntries();
 
         const channel = `databases.${DB_ID}.collections.${SCHEDULES_ID}.documents`;
         const unsubscribe = client.subscribe(channel, async event => {
+            if (!mounted.current) return;
             const doc = event.payload;
             if (doc.departmentId !== departmentId) return;
 
@@ -58,7 +60,6 @@ export function useSchedule(
                 setEntries(prev =>
                     sortEntries([doc, ...prev.filter(e => e.$id !== doc.$id)])
                 );
-                // Notify student of new class
                 if (enableNotifications && initialLoadDone.current) {
                     await fireNotification({
                         title: `📅 New Class Added — ${doc.day}`,
@@ -72,7 +73,6 @@ export function useSchedule(
                 setEntries(prev =>
                     sortEntries(prev.map(e => (e.$id === doc.$id ? doc : e)))
                 );
-                // Notify student of timetable change
                 if (enableNotifications && initialLoadDone.current) {
                     await fireNotification({
                         title: `🔄 Schedule Updated — ${doc.day}`,
@@ -84,11 +84,10 @@ export function useSchedule(
 
             if (isDelete) {
                 setEntries(prev => prev.filter(e => e.$id !== doc.$id));
-                // Notify student of cancelled class
                 if (enableNotifications && initialLoadDone.current) {
                     await fireNotification({
                         title: `❌ Class Removed`,
-                        body: `${doc.courseCode} · ${doc.courseName} on ${doc.day} has been removed from the schedule.`,
+                        body: `${doc.courseCode} · ${doc.courseName} on ${doc.day} has been removed.`,
                         tag: `schedule-delete-${doc.$id}`
                     });
                 }
@@ -96,15 +95,15 @@ export function useSchedule(
         });
 
         return () => unsubscribe();
-    }, [departmentId, fetch, enableNotifications]);
+    }, [departmentId, loadEntries, enableNotifications]);
 
-    // ── Grouped by day ──────────────────────────
+    // ── Grouped by day ──
     const byDay = DAYS.reduce((acc, day) => {
         acc[day] = entries.filter(e => e.day === day);
         return acc;
     }, {});
 
-    // ── Actions ─────────────────────────────────
+    // ── Actions ──
     const addClass = async data => {
         return await createClass({ ...data, departmentId });
     };
@@ -125,11 +124,10 @@ export function useSchedule(
         addClass,
         editClass,
         removeClass,
-        refresh: fetch
+        refresh: loadEntries // ← expose as refresh, same API as before
     };
 }
 
-// Sort by day order then start time
 function sortEntries(docs) {
     return [...docs].sort((a, b) => {
         const dayDiff = DAYS.indexOf(a.day) - DAYS.indexOf(b.day);
@@ -138,7 +136,6 @@ function sortEntries(docs) {
     });
 }
 
-// Fire a service worker notification (requires permission)
 async function fireNotification({ title, body, tag }) {
     if (!("serviceWorker" in navigator)) return;
     if (Notification.permission !== "granted") return;

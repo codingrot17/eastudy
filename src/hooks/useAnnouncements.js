@@ -18,19 +18,28 @@ export function useAnnouncements(
     const [error, setError] = useState(null);
     // Track if initial load is done so we don't notify on first fetch
     const initialLoadDone = useRef(false);
+    const mounted = useRef(true);
+
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+        };
+    }, []);
 
     // ── Fetch ───────────────────────────────────────
     const fetch = useCallback(async () => {
         if (!departmentId) return;
-        setLoading(true);
+        if (mounted.current) setLoading(true);
         try {
             const docs = await getAnnouncements(departmentId);
+            if (!mounted.current) return;
             setAnnouncements(sortAnnouncements(docs));
             initialLoadDone.current = true;
         } catch (err) {
-            setError(err.message);
+            if (mounted.current) setError(err.message);
         } finally {
-            setLoading(false);
+            if (mounted.current) setLoading(false);
         }
     }, [departmentId]);
 
@@ -41,6 +50,7 @@ export function useAnnouncements(
 
         const channel = `databases.${DB_ID}.collections.${ANNOUNCEMENTS_ID}.documents`;
         const unsubscribe = client.subscribe(channel, async event => {
+            if (!mounted.current) return;
             const doc = event.payload;
             if (doc.departmentId !== departmentId) return;
 
@@ -108,13 +118,8 @@ export function useAnnouncements(
         });
     };
 
-    const pin = async (id, currentPinned) => {
-        return await togglePin(id, !currentPinned);
-    };
-
-    const remove = async id => {
-        return await deleteAnnouncement(id);
-    };
+    const pin = async (id, currentPinned) => togglePin(id, !currentPinned);
+    const remove = async id => deleteAnnouncement(id);
 
     return { announcements, loading, error, post, pin, remove, refresh: fetch };
 }

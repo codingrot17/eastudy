@@ -1,4 +1,3 @@
-// src/appwrite/storage.js
 import { Storage, ID } from "appwrite";
 import { client } from "./config";
 
@@ -6,7 +5,14 @@ export const storage = new Storage(client);
 
 export const BUCKET_ID = import.meta.env.VITE_APPWRITE_STORAGE_BUCKET_ID;
 
-export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+// Strip trailing slash once so every URL helper is safe
+const ENDPOINT = (import.meta.env.VITE_APPWRITE_ENDPOINT || "").replace(
+    /\/$/,
+    ""
+);
+const PROJECT_ID = import.meta.env.VITE_APPWRITE_PROJECT_ID;
+
+export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 export const ALLOWED_TYPES = [
     "application/pdf",
     "image/jpeg",
@@ -22,7 +28,7 @@ export const ALLOWED_EXT = ["pdf", "jpg", "jpeg", "png", "webp"];
  */
 export async function uploadFile(file) {
     if (file.size > MAX_FILE_SIZE) {
-        throw new Error("File too large. Maximum size is 10MB.");
+        throw new Error("File too large. Maximum size is 10 MB.");
     }
     if (!ALLOWED_TYPES.includes(file.type)) {
         throw new Error(
@@ -37,9 +43,7 @@ export async function uploadFile(file) {
  * Works for both images and PDFs — use in <img src> or <iframe src>.
  */
 export function getFileViewUrl(fileId) {
-    const endpoint = import.meta.env.VITE_APPWRITE_ENDPOINT;
-    const projectId = import.meta.env.VITE_APPWRITE_PROJECT_ID;
-    return `${endpoint}/storage/buckets/${BUCKET_ID}/files/${fileId}/view?project=${projectId}`;
+    return `${ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${fileId}/view?project=${PROJECT_ID}`;
 }
 
 /**
@@ -47,14 +51,11 @@ export function getFileViewUrl(fileId) {
  * Triggers browser download when opened.
  */
 export function getFileDownloadUrl(fileId) {
-    const endpoint = import.meta.env.VITE_APPWRITE_ENDPOINT;
-    const projectId = import.meta.env.VITE_APPWRITE_PROJECT_ID;
-    return `${endpoint}/storage/buckets/${BUCKET_ID}/files/${fileId}/download?project=${projectId}`;
+    return `${ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${fileId}/download?project=${PROJECT_ID}`;
 }
 
 /**
  * Delete a file from Appwrite Storage.
- * Call this when deleting a material or post that had an attached file.
  */
 export async function deleteFile(fileId) {
     return await storage.deleteFile(BUCKET_ID, fileId);

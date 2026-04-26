@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { client, DB_ID } from "../appwrite/config";
 import {
     getMaterials,
@@ -13,17 +13,27 @@ export function useMaterials(departmentId) {
     const [materials, setMaterials] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const mounted = useRef(true);
+
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+        }; // ← cleanup
+    }, []);
 
     const fetch = useCallback(async () => {
         if (!departmentId) return;
-        setLoading(true);
+        if (mounted.current) setLoading(true);
+
         try {
             const docs = await getMaterials(departmentId);
+            if (!mounted.current) return;
             setMaterials(docs);
         } catch (err) {
-            setError(err.message);
+            if (mounted.current) setError(err.message);
         } finally {
-            setLoading(false);
+            if (mounted.current) setLoading(false);
         }
     }, [departmentId]);
 
@@ -34,6 +44,7 @@ export function useMaterials(departmentId) {
 
         const channel = `databases.${DB_ID}.collections.${MATERIALS_ID}.documents`;
         const unsubscribe = client.subscribe(channel, event => {
+            if (!mounted.current) return;
             const doc = event.payload;
             if (doc.departmentId !== departmentId) return;
 

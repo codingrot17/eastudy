@@ -18,10 +18,10 @@ export default function StudentAnnouncementsTab({ department }) {
     );
     const pwa = usePWAContext();
 
-    const handleEnableNotifs = async () => {
-        await pwa?.requestNotifPermission();
+    const handleEnableNotifs = () => {
+        pwa?.setShowNotifPrompt(true);
     };
-
+    
     return (
         <div className="flex flex-col gap-6">
             {/* Header */}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getCurrentUser } from "../../appwrite/auth";
 import {
@@ -14,6 +14,7 @@ export default function AuthCallback() {
     const [searchParams] = useSearchParams();
     const type = searchParams.get("type");
     const [status, setStatus] = useState("Completing sign in...");
+    const handled = useRef(false);
 
     useEffect(() => {
         const handle = async () => {
@@ -69,7 +70,7 @@ export default function AuthCallback() {
         };
 
         handle();
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [navigate, type, setAuth]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
         <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-white dark:bg-slate-950">

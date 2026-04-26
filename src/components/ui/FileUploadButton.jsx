@@ -1,7 +1,18 @@
-// src/components/ui/FileUploadButton.jsx
 import { useState, useRef } from "react";
-import { Paperclip, Loader2, X, FileText, Image } from "lucide-react";
-import { uploadFile, getFileType, ALLOWED_EXT } from "../../appwrite/storage";
+import {
+    Paperclip,
+    Loader2,
+    X,
+    FileText,
+    Image,
+    CheckCircle
+} from "lucide-react";
+import {
+    uploadFile,
+    getFileType,
+    ALLOWED_EXT,
+    formatFileSize
+} from "../../appwrite/storage";
 
 /**
  * FileUploadButton
@@ -11,12 +22,13 @@ import { uploadFile, getFileType, ALLOWED_EXT } from "../../appwrite/storage";
  *
  * Props:
  *   onUpload(fileDoc) — called after a successful upload
- *   disabled          — disables the button (e.g. while the form is saving)
+ *   disabled          — disables the button
  *   size              — "sm" (icon only) | "md" (icon + label)
  */
 export default function FileUploadButton({ onUpload, disabled, size = "md" }) {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState("");
+    const [uploadedName, setUploadedName] = useState(""); // brief success flash
     const inputRef = useRef(null);
 
     const handleChange = async e => {
@@ -24,13 +36,23 @@ export default function FileUploadButton({ onUpload, disabled, size = "md" }) {
         if (!file) return;
 
         setError("");
+        setUploadedName("");
         setUploading(true);
+
         try {
             const doc = await uploadFile(file);
-            // Enrich the Appwrite doc with local file metadata
-            onUpload({ ...doc, mimeType: file.type, name: file.name });
+            // Enrich Appwrite doc with local file metadata Appwrite doesn't store
+            const enriched = {
+                ...doc,
+                mimeType: file.type,
+                name: file.name, // human-readable filename
+                fileName: file.name, // alias used by materials + posts
+                size: file.size
+            };
+            setUploadedName(file.name);
+            onUpload(enriched);
         } catch (err) {
-            setError(err.message);
+            setError(err.message || "Upload failed. Please try again.");
         } finally {
             setUploading(false);
             // Reset so the same file can be re-selected after removal
@@ -38,7 +60,7 @@ export default function FileUploadButton({ onUpload, disabled, size = "md" }) {
         }
     };
 
-    const isLoading = uploading;
+    const accept = ALLOWED_EXT.map(e => `.${e}`).join(",");
 
     if (size === "sm") {
         return (
@@ -46,25 +68,25 @@ export default function FileUploadButton({ onUpload, disabled, size = "md" }) {
                 <button
                     type="button"
                     onClick={() => inputRef.current?.click()}
-                    disabled={disabled || isLoading}
-                    title="Attach file (PDF or image, max 10MB)"
+                    disabled={disabled || uploading}
+                    title="Attach file (PDF or image, max 10 MB)"
                     className="p-1.5 rounded-lg text-slate-400 hover:text-primary-700 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors disabled:opacity-50"
                 >
-                    {isLoading ? (
+                    {uploading ? (
                         <Loader2 size={16} className="animate-spin" />
                     ) : (
                         <Paperclip size={16} />
                     )}
                 </button>
                 {error && (
-                    <p className="text-xs text-red-500 max-w-[180px]">
+                    <p className="text-xs text-red-500 max-w-[200px] leading-tight">
                         {error}
                     </p>
                 )}
                 <input
                     ref={inputRef}
                     type="file"
-                    accept={ALLOWED_EXT.map(e => `.${e}`).join(",")}
+                    accept={accept}
                     onChange={handleChange}
                     className="hidden"
                 />
@@ -77,21 +99,38 @@ export default function FileUploadButton({ onUpload, disabled, size = "md" }) {
             <button
                 type="button"
                 onClick={() => inputRef.current?.click()}
-                disabled={disabled || isLoading}
+                disabled={disabled || uploading}
                 className="flex items-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-500 dark:text-slate-400 hover:border-primary-400 dark:hover:border-primary-600 hover:text-primary-700 dark:hover:text-primary-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-                {isLoading ? (
-                    <Loader2 size={18} className="animate-spin shrink-0" />
+                {uploading ? (
+                    <>
+                        <Loader2 size={18} className="animate-spin shrink-0" />
+                        Uploading…
+                    </>
+                ) : uploadedName ? (
+                    <>
+                        <CheckCircle
+                            size={18}
+                            className="text-emerald-500 shrink-0"
+                        />
+                        <span className="truncate">{uploadedName}</span>
+                    </>
                 ) : (
-                    <Paperclip size={18} className="shrink-0" />
+                    <>
+                        <Paperclip size={18} className="shrink-0" />
+                        Choose file (PDF / image, max 10 MB)
+                    </>
                 )}
-                {isLoading ? "Uploading…" : "Choose file"}
             </button>
-            {error && <p className="text-xs text-red-500 px-1">{error}</p>}
+            {error && (
+                <p className="text-xs text-red-500 px-1 leading-tight">
+                    {error}
+                </p>
+            )}
             <input
                 ref={inputRef}
                 type="file"
-                accept={ALLOWED_EXT.map(e => `.${e}`).join(",")}
+                accept={accept}
                 onChange={handleChange}
                 className="hidden"
             />
@@ -103,11 +142,11 @@ export default function FileUploadButton({ onUpload, disabled, size = "md" }) {
  * FileAttachmentChip
  *
  * Shows a compact chip with file name and a remove button.
- * Used in forms after a file has been selected/uploaded, before submitting.
+ * Used in forms after a file has been selected/uploaded.
  *
  * Props:
  *   file     — { name, mimeType }
- *   onRemove — called when the × button is clicked
+ *   onRemove — called when × is clicked
  */
 export function FileAttachmentChip({ file, onRemove }) {
     const type = getFileType(file.mimeType);
@@ -120,7 +159,7 @@ export function FileAttachmentChip({ file, onRemove }) {
                 <FileText size={14} className="text-red-500 shrink-0" />
             )}
             <span className="truncate text-xs text-slate-700 dark:text-slate-300 min-w-0">
-                {file.name}
+                {file.name || file.fileName}
             </span>
             <button
                 type="button"

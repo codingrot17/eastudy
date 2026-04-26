@@ -36,10 +36,8 @@ self.addEventListener("fetch", event => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // Skip non-GET
     if (request.method !== "GET") return;
 
-    // ── Navigation (HTML) — network first, shell fallback ──
     if (request.mode === "navigate") {
         event.respondWith(
             fetch(request).catch(() => caches.match("/index.html"))
@@ -47,10 +45,6 @@ self.addEventListener("fetch", event => {
         return;
     }
 
-    // ── Appwrite API GET calls — stale-while-revalidate with max age ──
-    // This is the key fix for slow networks:
-    // Students on 2G get their cached announcements/schedule instantly
-    // while the fresh data loads in the background.
     if (
         url.hostname.includes("appwrite.io") ||
         url.hostname.includes("cloud.appwrite")
@@ -59,39 +53,39 @@ self.addEventListener("fetch", event => {
             caches.open(DATA_CACHE).then(async cache => {
                 const cached = await cache.match(request);
 
-                // Check if cached response is still fresh
                 if (cached) {
                     const cachedDate = cached.headers.get("sw-cached-at");
                     if (cachedDate) {
                         const age = (Date.now() - parseInt(cachedDate)) / 1000;
                         if (age < DATA_CACHE_MAX_AGE_SECONDS) {
-                            // Serve fresh cache, revalidate in background
                             revalidateInBackground(request, cache);
                             return cached;
                         }
                     }
                 }
 
-                // Cache miss or stale — go to network
                 try {
                     const response = await fetch(request);
                     if (response.ok) {
-                        // Clone and add our own timestamp header before caching
+                        // ← FIX: read body once, construct new response
+                        const body = await response.arrayBuffer();
                         const headers = new Headers(response.headers);
                         headers.set("sw-cached-at", Date.now().toString());
-                        const toCacheResponse = new Response(
-                            await response.clone().blob(),
-                            {
-                                status: response.status,
-                                statusText: response.statusText,
-                                headers
-                            }
-                        );
+                        const toCacheResponse = new Response(body, {
+                            status: response.status,
+                            statusText: response.statusText,
+                            headers
+                        });
                         cache.put(request, toCacheResponse);
+                        // Return a fresh response from the same body
+                        return new Response(body, {
+                            status: response.status,
+                            statusText: response.statusText,
+                            headers: new Headers(response.headers)
+                        });
                     }
                     return response;
                 } catch {
-                    // Completely offline — serve stale cache as last resort
                     if (cached) return cached;
                     throw new Error("Offline and no cached data");
                 }
@@ -100,7 +94,6 @@ self.addEventListener("fetch", event => {
         return;
     }
 
-    // ── JS/CSS/fonts: stale-while-revalidate ──
     event.respondWith(
         caches.open(SHELL_CACHE).then(async cache => {
             const cached = await cache.match(request);
@@ -110,11 +103,30 @@ self.addEventListener("fetch", event => {
                     return response;
                 })
                 .catch(() => cached);
-
             return cached || networkPromise;
         })
     );
 });
+
+// Also fix revalidateInBackground the same way:
+function revalidateInBackground(request, cache) {
+    fetch(request)
+        .then(async response => {
+            if (!response.ok) return;
+            const body = await response.arrayBuffer();
+            const headers = new Headers(response.headers);
+            headers.set("sw-cached-at", Date.now().toString());
+            cache.put(
+                request,
+                new Response(body, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers
+                })
+            );
+        })
+        .catch(() => {});
+}
 
 function revalidateInBackground(request, cache) {
     fetch(request)
