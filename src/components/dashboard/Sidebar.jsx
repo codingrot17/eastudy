@@ -140,10 +140,14 @@ export default function Sidebar({
             {/* Bottom Actions */}
             <div className="px-3 pb-6 flex flex-col gap-1 border-t border-white/10 pt-4">
                 <button
-                    onClick={() =>
-                        pwa?.notifPermission === "default" &&
-                        pwa?.requestNotifPermission()
-                    }
+                    onClick={() => {
+                        if (pwa?.notifPermission === "default") {
+                            pwa?.requestNotifPermission(
+                                user?.$id,
+                                department?.$id
+                            );
+                        }
+                    }}
                     className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-indigo-200 hover:bg-white/8 hover:text-white transition-all"
                 >
                     {pwa?.notifPermission === "granted" ? (

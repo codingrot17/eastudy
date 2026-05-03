@@ -509,7 +509,7 @@ const PostCard = memo(function PostCard({
     // ── File attachment detection ──────────────────────────────────────────
     // Use explicit check: sourceType must be "file" AND fileId must exist
     const hasFile = post.sourceType === "file" && !!post.fileId;
-    const fileType = hasFile ? getFileType(post.mimeType) : null;
+    const fileType = hasFile ? getFileType(post.mimeType ?? "") : null;
 
     // Debug helper — remove after confirming it works
     // console.log(`[PostCard ${post.$id}] sourceType=${post.sourceType} fileId=${post.fileId} hasFile=${hasFile}`);

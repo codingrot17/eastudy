@@ -5,76 +5,77 @@ export const storage = new Storage(client);
 
 export const BUCKET_ID = import.meta.env.VITE_APPWRITE_STORAGE_BUCKET_ID;
 
-// Strip trailing slash once so every URL helper is safe
-const ENDPOINT = (import.meta.env.VITE_APPWRITE_ENDPOINT || "").replace(
-    /\/$/,
-    ""
-);
+const ENDPOINT = (import.meta.env.VITE_APPWRITE_ENDPOINT || "").replace(/\/$/, "");
 const PROJECT_ID = import.meta.env.VITE_APPWRITE_PROJECT_ID;
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
 export const ALLOWED_TYPES = [
     "application/pdf",
     "image/jpeg",
-    "image/jpg",
+    "image/jpg", 
     "image/png",
-    "image/webp"
+    "image/webp",
+    // DOC support
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ];
-export const ALLOWED_EXT = ["pdf", "jpg", "jpeg", "png", "webp"];
 
-/**
- * Upload a file to Appwrite Storage and return the file document.
- * Validates size and type before uploading.
- */
+export const ALLOWED_EXT = ["pdf", "jpg", "jpeg", "png", "webp", "doc", "docx"];
+
 export async function uploadFile(file) {
     if (file.size > MAX_FILE_SIZE) {
-        throw new Error("File too large. Maximum size is 10 MB.");
+        throw new Error(`File too large. Maximum size is ${formatFileSize(MAX_FILE_SIZE)}.`);
     }
-    if (!ALLOWED_TYPES.includes(file.type)) {
-        throw new Error(
-            "File type not supported. Please upload a PDF or image (JPG, PNG, WebP)."
-        );
+    // Check by MIME or extension fallback (some Android browsers misreport MIME)
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    const mimeOk = ALLOWED_TYPES.includes(file.type);
+    const extOk = ALLOWED_EXT.includes(ext);
+    
+    if (!mimeOk && !extOk) {
+        throw new Error("File type not supported. Upload a PDF, image (JPG, PNG, WebP), or Word doc.");
     }
-    return await storage.createFile(BUCKET_ID, ID.unique(), file);
+    
+    // Normalise MIME for Word docs that Android reports incorrectly
+    const effectiveMime = mimeOk ? file.type : getMimeFromExt(ext);
+    
+    const fileDoc = await storage.createFile(BUCKET_ID, ID.unique(), file);
+    return { ...fileDoc, mimeType: effectiveMime, fileName: file.name };
 }
 
-/**
- * Get a direct view URL for a file.
- * Works for both images and PDFs — use in <img src> or <iframe src>.
- */
+function getMimeFromExt(ext) {
+    const map = {
+        pdf: "application/pdf",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        webp: "image/webp",
+        doc: "application/msword",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    };
+    return map[ext] ?? "application/octet-stream";
+}
+
 export function getFileViewUrl(fileId) {
     return `${ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${fileId}/view?project=${PROJECT_ID}`;
 }
 
-/**
- * Get a download URL for a file.
- * Triggers browser download when opened.
- */
 export function getFileDownloadUrl(fileId) {
     return `${ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${fileId}/download?project=${PROJECT_ID}`;
 }
 
-/**
- * Delete a file from Appwrite Storage.
- */
 export async function deleteFile(fileId) {
     return await storage.deleteFile(BUCKET_ID, fileId);
 }
 
-/**
- * Derive a simple file type string from a MIME type.
- * Returns "pdf", "image", or "other".
- */
 export function getFileType(mimeType) {
     if (!mimeType) return "other";
     if (mimeType === "application/pdf") return "pdf";
     if (mimeType.startsWith("image/")) return "image";
+    if (mimeType.includes("word") || mimeType.includes("document")) return "doc";
     return "other";
 }
 
-/**
- * Format bytes into a human-readable string (e.g. "3.2 MB").
- */
 export function formatFileSize(bytes) {
     if (!bytes) return "";
     if (bytes < 1024) return `${bytes} B`;

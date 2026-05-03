@@ -128,34 +128,20 @@ function revalidateInBackground(request, cache) {
         .catch(() => {});
 }
 
-function revalidateInBackground(request, cache) {
-    fetch(request)
-        .then(async response => {
-            if (!response.ok) return;
-            const headers = new Headers(response.headers);
-            headers.set("sw-cached-at", Date.now().toString());
-            const toCache = new Response(await response.clone().blob(), {
-                status: response.status,
-                statusText: response.statusText,
-                headers
-            });
-            cache.put(request, toCache);
-        })
-        .catch(() => {});
-}
-
 // ── Push Notifications ──────────────────────────
 self.addEventListener("push", event => {
     let data = {
         title: "Eastudy",
         body: "You have a new update",
         icon: "/favicon.svg",
-        tag: "eastudy-update"
+        tag: "eastudy-update",
+        url: "/"
     };
 
     if (event.data) {
         try {
-            data = { ...data, ...event.data.json() };
+            const parsed = event.data.json();
+            data = { ...data, ...parsed };
         } catch {
             data.body = event.data.text();
         }
@@ -174,7 +160,6 @@ self.addEventListener("push", event => {
         })
     );
 });
-
 // ── Notification click ──────────────────────────
 self.addEventListener("notificationclick", event => {
     event.notification.close();

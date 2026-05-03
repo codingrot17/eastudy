@@ -5,21 +5,15 @@ export const POSTS_ID = import.meta.env.VITE_APPWRITE_POSTS_COLLECTION_ID;
 export const COMMENTS_ID = import.meta.env.VITE_APPWRITE_COMMENTS_COLLECTION_ID;
 
 // ── Helpers ─────────────────────────────────────
-
 export function parsePost(doc) {
     let reactions = {};
     try {
-        // Appwrite stores reactions as a JSON string.
-        // After an optimistic update the value may already be a parsed
-        // object — handle both cases defensively.
-        reactions =
-            typeof doc.reactions === "string"
-                ? JSON.parse(doc.reactions || "{}")
-                : (doc.reactions ?? {});
+        reactions = typeof doc.reactions === "string"
+            ? JSON.parse(doc.reactions || "{}")
+            : (doc.reactions ?? {});
     } catch {
         reactions = {};
     }
-
     return {
         ...doc,
         reactions,
@@ -29,7 +23,6 @@ export function parsePost(doc) {
         sourceType: doc.sourceType ?? "none"
     };
 }
-
 // ── Posts ────────────────────────────────────────
 
 export async function getPosts(departmentId, limit = 30) {

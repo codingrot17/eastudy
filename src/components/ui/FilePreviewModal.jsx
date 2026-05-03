@@ -6,7 +6,8 @@ import {
     FileText,
     Image,
     Loader2,
-    AlertCircle
+    AlertCircle,
+    File
 } from "lucide-react";
 import { useState } from "react";
 import {
@@ -15,35 +16,20 @@ import {
     getFileType
 } from "../../appwrite/storage";
 
-/**
- * FilePreviewModal
- *
- * Full-screen modal for previewing uploaded files.
- * - Images: rendered as <img>
- * - PDFs: rendered in an <iframe>; falls back to download link if iframe errors
- * - Other: fallback with download button
- *
- * Props:
- *   file    — { fileId, mimeType, fileName } | null
- *   onClose — called to dismiss the modal
- */
 export default function FilePreviewModal({ file, onClose }) {
+    // Reset internal state when file changes via key prop on inner component
+    if (!file) return null;
+    return <ModalInner file={file} onClose={onClose} />;
+}
+
+function ModalInner({ file, onClose }) {
     const [iframeLoading, setIframeLoading] = useState(true);
     const [imgError, setImgError] = useState(false);
     const [iframeError, setIframeError] = useState(false);
 
-    if (!file) return null;
-
     const viewUrl = getFileViewUrl(file.fileId);
     const downloadUrl = getFileDownloadUrl(file.fileId);
     const type = getFileType(file.mimeType);
-
-    const handleBackdropClick = e => {
-        if (e.target === e.currentTarget) onClose();
-    };
-
-    // Reset error states when a new file is opened
-    // (handled naturally since component unmounts when file=null)
 
     return (
         <AnimatePresence>
@@ -53,9 +39,9 @@ export default function FilePreviewModal({ file, onClose }) {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
                 className="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-sm"
-                onClick={handleBackdropClick}
+                onClick={e => e.target === e.currentTarget && onClose()}
             >
-                {/* ── Top bar ── */}
+                {/* Top bar */}
                 <div
                     className="flex items-center justify-between px-4 py-3 bg-slate-950/90 backdrop-blur-sm border-b border-white/10 shrink-0"
                     onClick={e => e.stopPropagation()}
@@ -66,10 +52,15 @@ export default function FilePreviewModal({ file, onClose }) {
                                 size={15}
                                 className="text-violet-400 shrink-0"
                             />
-                        ) : (
+                        ) : type === "pdf" ? (
                             <FileText
                                 size={15}
                                 className="text-red-400 shrink-0"
+                            />
+                        ) : (
+                            <File
+                                size={15}
+                                className="text-blue-400 shrink-0"
                             />
                         )}
                         <p className="text-sm font-medium text-white truncate">
@@ -80,17 +71,17 @@ export default function FilePreviewModal({ file, onClose }) {
                                 ? "PDF"
                                 : type === "image"
                                   ? "Image"
-                                  : "File"}
+                                  : type === "doc"
+                                    ? "DOC"
+                                    : "File"}
                         </span>
                     </div>
-
                     <div className="flex items-center gap-2 shrink-0">
                         <a
                             href={downloadUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
-                            title="Download file"
                         >
                             <Download size={13} />
                             <span className="hidden sm:inline">Download</span>
@@ -100,7 +91,6 @@ export default function FilePreviewModal({ file, onClose }) {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
-                            title="Open in new tab"
                         >
                             <ExternalLink size={13} />
                             <span className="hidden sm:inline">Open</span>
@@ -108,19 +98,17 @@ export default function FilePreviewModal({ file, onClose }) {
                         <button
                             onClick={onClose}
                             className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                            title="Close"
                         >
                             <X size={18} />
                         </button>
                     </div>
                 </div>
 
-                {/* ── Preview area ── */}
+                {/* Preview area */}
                 <div
                     className="flex-1 overflow-hidden flex items-center justify-center p-3 sm:p-5"
                     onClick={e => e.stopPropagation()}
                 >
-                    {/* Image preview */}
                     {type === "image" && !imgError && (
                         <motion.img
                             initial={{ opacity: 0, scale: 0.97 }}
@@ -133,15 +121,21 @@ export default function FilePreviewModal({ file, onClose }) {
                         />
                     )}
 
-                    {/* Image load error */}
                     {type === "image" && imgError && (
-                        <ImageError
+                        <FallbackCard
+                            icon={
+                                <AlertCircle
+                                    size={28}
+                                    className="text-amber-400"
+                                />
+                            }
+                            title="Couldn't load image"
+                            desc="The image may be private or deleted. Try opening it directly."
                             viewUrl={viewUrl}
                             downloadUrl={downloadUrl}
                         />
                     )}
 
-                    {/* PDF preview */}
                     {type === "pdf" && !iframeError && (
                         <div className="relative w-full h-full rounded-xl overflow-hidden">
                             {iframeLoading && (
@@ -169,50 +163,46 @@ export default function FilePreviewModal({ file, onClose }) {
                         </div>
                     )}
 
-                    {/* PDF iframe failed — show open/download fallback */}
                     {type === "pdf" && iframeError && (
-                        <PDFError
+                        <FallbackCard
+                            icon={
+                                <FileText size={36} className="text-red-400" />
+                            }
+                            title={file.fileName || "PDF Document"}
+                            desc="PDF preview failed. Open in your browser or download it."
                             viewUrl={viewUrl}
                             downloadUrl={downloadUrl}
-                            fileName={file.fileName}
+                            openLabel="Open in browser"
                         />
                     )}
 
-                    {/* Other file types */}
+                    {/* DOC files — can't preview, offer download */}
+                    {type === "doc" && (
+                        <FallbackCard
+                            icon={<File size={36} className="text-blue-400" />}
+                            title={file.fileName || "Document"}
+                            desc="Word documents can't be previewed here. Download to open in your device."
+                            viewUrl={viewUrl}
+                            downloadUrl={downloadUrl}
+                        />
+                    )}
+
                     {type === "other" && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 12 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="flex flex-col items-center gap-5 text-center px-6"
-                        >
-                            <div className="w-20 h-20 rounded-2xl bg-white/10 flex items-center justify-center">
+                        <FallbackCard
+                            icon={
                                 <FileText
                                     size={36}
                                     className="text-slate-400"
                                 />
-                            </div>
-                            <div>
-                                <p className="font-bold text-white mb-1">
-                                    {file.fileName || "File"}
-                                </p>
-                                <p className="text-sm text-slate-400">
-                                    Preview not available for this file type.
-                                </p>
-                            </div>
-                            <a
-                                href={downloadUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 px-6 py-3 bg-primary-700 hover:bg-primary-600 text-white font-semibold text-sm rounded-xl transition-colors"
-                            >
-                                <Download size={16} />
-                                Download File
-                            </a>
-                        </motion.div>
+                            }
+                            title={file.fileName || "File"}
+                            desc="Preview not available for this file type."
+                            viewUrl={viewUrl}
+                            downloadUrl={downloadUrl}
+                        />
                     )}
                 </div>
 
-                {/* ── Bottom hint ── */}
                 <div
                     className="shrink-0 py-2 text-center"
                     onClick={e => e.stopPropagation()}
@@ -226,20 +216,26 @@ export default function FilePreviewModal({ file, onClose }) {
     );
 }
 
-// ── Error fallbacks ──────────────────────────────
-
-function ImageError({ viewUrl, downloadUrl }) {
+function FallbackCard({
+    icon,
+    title,
+    desc,
+    viewUrl,
+    downloadUrl,
+    openLabel = "Open in tab"
+}) {
     return (
-        <div className="flex flex-col items-center gap-5 text-center px-6">
-            <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center">
-                <AlertCircle size={28} className="text-amber-400" />
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center gap-5 text-center px-6"
+        >
+            <div className="w-20 h-20 rounded-2xl bg-white/10 flex items-center justify-center">
+                {icon}
             </div>
             <div>
-                <p className="font-bold text-white mb-1">Couldn't load image</p>
-                <p className="text-sm text-slate-400 max-w-xs">
-                    This can happen if bucket permissions are not set to public
-                    read, or the file was deleted.
-                </p>
+                <p className="font-bold text-white mb-1">{title}</p>
+                <p className="text-sm text-slate-400 max-w-xs">{desc}</p>
             </div>
             <div className="flex gap-3">
                 <a
@@ -249,7 +245,7 @@ function ImageError({ viewUrl, downloadUrl }) {
                     className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-sm rounded-xl transition-colors"
                 >
                     <ExternalLink size={15} />
-                    Open in tab
+                    {openLabel}
                 </a>
                 <a
                     href={downloadUrl}
@@ -261,45 +257,6 @@ function ImageError({ viewUrl, downloadUrl }) {
                     Download
                 </a>
             </div>
-        </div>
-    );
-}
-
-function PDFError({ viewUrl, downloadUrl, fileName }) {
-    return (
-        <div className="flex flex-col items-center gap-5 text-center px-6">
-            <div className="w-20 h-20 rounded-2xl bg-white/10 flex items-center justify-center">
-                <FileText size={36} className="text-red-400" />
-            </div>
-            <div>
-                <p className="font-bold text-white mb-1">
-                    {fileName || "PDF Document"}
-                </p>
-                <p className="text-sm text-slate-400 max-w-xs">
-                    PDF preview couldn't load. Open it in your browser or
-                    download it.
-                </p>
-            </div>
-            <div className="flex gap-3">
-                <a
-                    href={viewUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-sm rounded-xl transition-colors"
-                >
-                    <ExternalLink size={15} />
-                    Open in browser
-                </a>
-                <a
-                    href={downloadUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-5 py-2.5 bg-primary-700 hover:bg-primary-600 text-white font-semibold text-sm rounded-xl transition-colors"
-                >
-                    <Download size={15} />
-                    Download PDF
-                </a>
-            </div>
-        </div>
+        </motion.div>
     );
 }

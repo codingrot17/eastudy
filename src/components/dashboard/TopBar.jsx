@@ -42,10 +42,14 @@ export default function TopBar({ user, role, onLogout, loggingOut }) {
 
                     {/* Notification bell */}
                     <button
-                        onClick={() =>
-                            pwa?.notifPermission === "default" &&
-                            pwa?.requestNotifPermission()
-                        }
+                        onClick={() => {
+                            if (pwa?.notifPermission === "default") {
+                                pwa?.requestNotifPermission(
+                                    user?.$id,
+                                    department?.$id
+                                );
+                            }
+                        }}
                         className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative"
                         title={
                             pwa?.notifPermission === "granted"

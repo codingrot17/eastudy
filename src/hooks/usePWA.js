@@ -1,4 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
+import { databases, DB_ID } from "../appwrite/config";
+import { ID, Query } from "appwrite"; // Added Query import
+
+const PUSH_SUBS_ID = import.meta.env.VITE_APPWRITE_PUSH_SUBS_COLLECTION_ID;
 
 // ── Service Worker Registration ─────────────────
 export async function registerSW() {
@@ -13,6 +17,32 @@ export async function registerSW() {
         console.warn("[PWA] SW registration failed:", err);
         return null;
     }
+}
+
+// ── Subscribe to push (Moved to module-level) ───
+export async function savePushSubscription(subscription, userId, departmentId) {
+    if (!subscription || !userId || !departmentId) return;
+
+    const json = subscription.toJSON();
+
+    // Check if already saved (avoid duplicates)
+    try {
+        const existing = await databases.listDocuments(DB_ID, PUSH_SUBS_ID, [
+            Query.equal("userId", userId),
+            Query.equal("endpoint", json.endpoint),
+            Query.limit(1)
+        ]);
+        if (existing.total > 0) return; // already stored
+    } catch {}
+
+    await databases.createDocument(DB_ID, PUSH_SUBS_ID, ID.unique(), {
+        userId,
+        departmentId,
+        endpoint: json.endpoint,
+        p256dh: json.keys?.p256dh ?? "",
+        auth: json.keys?.auth ?? "",
+        userAgent: navigator.userAgent.slice(0, 200)
+    });
 }
 
 // ── Main usePWA hook ────────────────────────────
@@ -80,43 +110,40 @@ export function usePWA() {
     }, [installPrompt]);
 
     // ── Request push notification permission ────
-    const requestNotifPermission = useCallback(async () => {
-        if (!("Notification" in window)) return "denied";
+    const requestNotifPermission = useCallback(
+        async (userId, departmentId) => {
+            if (!("Notification" in window)) return "denied";
 
-        const permission = await Notification.requestPermission();
-        setNotifPermission(permission);
-        return permission;
-    }, []);
+            const permission = await Notification.requestPermission();
+            setNotifPermission(permission);
 
-    // ── Subscribe to push ───────────────────────
-    // Note: Full Web Push requires a backend to send pushes.
-    // For now we subscribe and store locally — ready for when backend is added.
-    const subscribeToPush = useCallback(async () => {
-        if (!swRegistration) return null;
-        try {
-            const permission = await requestNotifPermission();
-            if (permission !== "granted") return null;
+            if (permission === "granted" && swRegistration) {
+                try {
+                    const VAPID_PUBLIC_KEY = import.meta.env
+                        .VITE_VAPID_PUBLIC_KEY;
+                    if (!VAPID_PUBLIC_KEY) return permission;
 
-            // VAPID public key placeholder — replace with your real key
-            // Generate at: https://vapidkeys.com or use web-push npm package
-            const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+                    // Subscribe to push
+                    const sub = await swRegistration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey:
+                            urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                    });
+                    setPushSubscription(sub);
 
-            if (!VAPID_PUBLIC_KEY) {
-                console.warn("[PWA] No VAPID key — push subscription skipped");
-                return null;
+                    // Save to Appwrite — fire and forget
+                    savePushSubscription(sub, userId, departmentId).catch(
+                        console.warn
+                    );
+                } catch (err) {
+                    console.warn("[PWA] Push subscription failed:", err);
+                }
             }
 
-            const sub = await swRegistration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-            });
-            setPushSubscription(sub);
-            return sub;
-        } catch (err) {
-            console.warn("[PWA] Push subscription failed:", err);
-            return null;
-        }
-    }, [swRegistration, requestNotifPermission]);
+            return permission;
+        },
+        [swRegistration]
+    );
 
     // ── Send local notification (works without backend) ──
     const sendLocalNotification = useCallback(
@@ -160,8 +187,7 @@ export function usePWA() {
         notifPermission,
         pushSubscription,
         requestNotifPermission,
-        subscribeToPush,
-        sendLocalNotification,
+        sendLocalNotification, // Removed subscribeToPush
         // Badge
         setBadge,
         // SW

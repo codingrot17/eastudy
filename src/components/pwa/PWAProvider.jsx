@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { usePWA } from "../../hooks/usePWA";
+import useAuthStore from "../../store/useAuthStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { Download, X, Bell, Smartphone, Share, Plus } from "lucide-react";
 
@@ -31,6 +32,9 @@ function useIsDashboard() {
 export default function PWAProvider({ children }) {
     const pwa = usePWA();
     const isDashboard = useIsDashboard();
+
+    // Moved inside the component body
+    const { user, department } = useAuthStore();
 
     const [showInstallBanner, setShowInstallBanner] = useState(false);
     const [showIOSGuide, setShowIOSGuide] = useState(false);
@@ -104,7 +108,7 @@ export default function PWAProvider({ children }) {
     };
 
     const handleEnableNotifs = async () => {
-        await pwa.requestNotifPermission();
+        await pwa.requestNotifPermission(user?.$id, department?.$id);
         setShowNotifPrompt(false);
     };
 
