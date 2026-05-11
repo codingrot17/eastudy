@@ -51,6 +51,13 @@ export default function Sidebar({
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const handleBellClick = () => {
+        if (pwa?.notifPermission === "default") {
+            // PWAContext.requestNotifPermission is now bound with fallbacks
+            pwa.requestNotifPermission(user?.$id, department?.$id);
+        }
+    };
+
     return (
         <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-screen w-64 bg-[#1E1B4B] text-white z-40 overflow-y-auto">
             {/* Logo */}
@@ -139,15 +146,9 @@ export default function Sidebar({
 
             {/* Bottom Actions */}
             <div className="px-3 pb-6 flex flex-col gap-1 border-t border-white/10 pt-4">
+                {/* Bell — now passes correct args */}
                 <button
-                    onClick={() => {
-                        if (pwa?.notifPermission === "default") {
-                            pwa?.requestNotifPermission(
-                                user?.$id,
-                                department?.$id
-                            );
-                        }
-                    }}
+                    onClick={handleBellClick}
                     className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-indigo-200 hover:bg-white/8 hover:text-white transition-all"
                 >
                     {pwa?.notifPermission === "granted" ? (

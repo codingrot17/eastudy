@@ -6,6 +6,7 @@ import Sidebar from "./Sidebar";
 import BottomNav from "./BottomNav";
 import TopBar from "./TopBar";
 import ErrorBoundary from "../ErrorBoundary";
+import { useNotifications } from "../../hooks/useNotifications";
 
 export default function DashboardLayout({ role, tabs, defaultTab = "home" }) {
     const navigate = useNavigate();
@@ -13,8 +14,13 @@ export default function DashboardLayout({ role, tabs, defaultTab = "home" }) {
     const [activeTab, setActiveTab] = useState(defaultTab);
     const [loggingOut, setLoggingOut] = useState(false);
 
+    // ── Mount notifications — auto-saves sub, manages badge ──
+    // eslint-disable-next-line no-unused-vars
+    const { clearBadge } = useNotifications(user, department);
+
     const handleLogout = async () => {
         setLoggingOut(true);
+        clearBadge(); // Clear badge on logout
         try {
             await logout();
             clear();
@@ -22,6 +28,12 @@ export default function DashboardLayout({ role, tabs, defaultTab = "home" }) {
         } catch {
             setLoggingOut(false);
         }
+    };
+
+    const handleTabChange = tab => {
+        setActiveTab(tab);
+        // Clear badge when user navigates to see content
+        clearBadge();
     };
 
     const ActiveComponent = tabs[activeTab] ?? tabs[defaultTab];
@@ -34,22 +46,21 @@ export default function DashboardLayout({ role, tabs, defaultTab = "home" }) {
                 user={user}
                 department={department}
                 activeTab={activeTab}
-                onTabChange={setActiveTab}
+                onTabChange={handleTabChange}
                 onLogout={handleLogout}
                 loggingOut={loggingOut}
             />
 
-            {/* Mobile Top Bar */}
+            {/* Mobile Top Bar — now receives department */}
             <TopBar
                 user={user}
+                department={department}
                 role={role}
                 onLogout={handleLogout}
                 loggingOut={loggingOut}
             />
 
-            {/* Main Content — each tab wrapped in its own ErrorBoundary
-                so a crash in one tab (e.g. FeedTab) doesn't kill the
-                whole dashboard */}
+            {/* Main Content */}
             <main className="lg:ml-64 min-h-screen">
                 <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 pb-28 lg:pb-8">
                     <ErrorBoundary
@@ -60,14 +71,14 @@ export default function DashboardLayout({ role, tabs, defaultTab = "home" }) {
                             user={user}
                             profile={profile}
                             department={department}
-                            onTabChange={setActiveTab}
+                            onTabChange={handleTabChange}
                         />
                     </ErrorBoundary>
                 </div>
             </main>
 
             {/* Mobile Bottom Nav */}
-            <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+            <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
         </div>
     );
 }

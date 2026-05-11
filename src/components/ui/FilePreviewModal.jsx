@@ -7,7 +7,8 @@ import {
     Image,
     Loader2,
     AlertCircle,
-    File
+    File,
+    RefreshCw
 } from "lucide-react";
 import { useState } from "react";
 import {
@@ -17,19 +18,40 @@ import {
 } from "../../appwrite/storage";
 
 export default function FilePreviewModal({ file, onClose }) {
-    // Reset internal state when file changes via key prop on inner component
     if (!file) return null;
-    return <ModalInner file={file} onClose={onClose} />;
+    return <ModalInner key={file.fileId} file={file} onClose={onClose} />;
 }
 
 function ModalInner({ file, onClose }) {
     const [iframeLoading, setIframeLoading] = useState(true);
     const [imgError, setImgError] = useState(false);
     const [iframeError, setIframeError] = useState(false);
+    // Fallback: use Google Docs viewer for PDFs when direct iframe fails
+    const [useGoogleViewer, setUseGoogleViewer] = useState(false);
 
     const viewUrl = getFileViewUrl(file.fileId);
     const downloadUrl = getFileDownloadUrl(file.fileId);
     const type = getFileType(file.mimeType);
+
+    // Google Docs viewer URL — works cross-origin on mobile browsers
+    const googleViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(viewUrl)}&embedded=true`;
+
+    const handleIframeError = () => {
+        setIframeLoading(false);
+        if (!useGoogleViewer) {
+            // Try Google Docs viewer before showing fallback card
+            setUseGoogleViewer(true);
+            setIframeLoading(true);
+        } else {
+            setIframeError(true);
+        }
+    };
+
+    const retryDirect = () => {
+        setUseGoogleViewer(false);
+        setIframeError(false);
+        setIframeLoading(true);
+    };
 
     return (
         <AnimatePresence>
@@ -109,6 +131,7 @@ function ModalInner({ file, onClose }) {
                     className="flex-1 overflow-hidden flex items-center justify-center p-3 sm:p-5"
                     onClick={e => e.stopPropagation()}
                 >
+                    {/* ── Image preview ── */}
                     {type === "image" && !imgError && (
                         <motion.img
                             initial={{ opacity: 0, scale: 0.97 }}
@@ -130,36 +153,51 @@ function ModalInner({ file, onClose }) {
                                 />
                             }
                             title="Couldn't load image"
-                            desc="The image may be private or deleted. Try opening it directly."
+                            desc="The image may still be processing. Try opening it directly."
                             viewUrl={viewUrl}
                             downloadUrl={downloadUrl}
                         />
                     )}
 
+                    {/* ── PDF preview — tries direct, then Google Docs viewer ── */}
                     {type === "pdf" && !iframeError && (
                         <div className="relative w-full h-full rounded-xl overflow-hidden">
                             {iframeLoading && (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-100 dark:bg-slate-800 rounded-xl z-10">
                                     <Loader2
                                         size={28}
                                         className="animate-spin text-primary-700"
                                     />
                                     <p className="text-sm text-slate-500">
-                                        Loading PDF…
+                                        {useGoogleViewer
+                                            ? "Opening with Google Viewer…"
+                                            : "Loading PDF…"}
                                     </p>
                                 </div>
                             )}
                             <iframe
-                                src={viewUrl}
+                                key={useGoogleViewer ? "google" : "direct"}
+                                src={
+                                    useGoogleViewer ? googleViewerUrl : viewUrl
+                                }
                                 title={file.fileName || "PDF"}
                                 className="w-full h-full bg-white rounded-xl"
                                 style={{ minHeight: "65vh" }}
                                 onLoad={() => setIframeLoading(false)}
-                                onError={() => {
-                                    setIframeLoading(false);
-                                    setIframeError(true);
-                                }}
+                                onError={handleIframeError}
                             />
+                            {/* Show which viewer is active + retry option */}
+                            {!iframeLoading && useGoogleViewer && (
+                                <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                                    <button
+                                        onClick={retryDirect}
+                                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-900/70 hover:bg-slate-900 text-white transition-colors"
+                                    >
+                                        <RefreshCw size={12} />
+                                        Try direct
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -169,14 +207,14 @@ function ModalInner({ file, onClose }) {
                                 <FileText size={36} className="text-red-400" />
                             }
                             title={file.fileName || "PDF Document"}
-                            desc="PDF preview failed. Open in your browser or download it."
+                            desc="PDF preview isn't available in this browser. Download it to open in a PDF reader."
                             viewUrl={viewUrl}
                             downloadUrl={downloadUrl}
                             openLabel="Open in browser"
                         />
                     )}
 
-                    {/* DOC files — can't preview, offer download */}
+                    {/* ── DOC files — can't preview, offer download ── */}
                     {type === "doc" && (
                         <FallbackCard
                             icon={<File size={36} className="text-blue-400" />}
@@ -237,7 +275,7 @@ function FallbackCard({
                 <p className="font-bold text-white mb-1">{title}</p>
                 <p className="text-sm text-slate-400 max-w-xs">{desc}</p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap justify-center">
                 <a
                     href={viewUrl}
                     target="_blank"

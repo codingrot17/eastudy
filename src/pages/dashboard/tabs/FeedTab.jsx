@@ -20,7 +20,8 @@ import {
     ExternalLink,
     Image,
     Download,
-    Eye
+    Eye,
+    File
 } from "lucide-react";
 import { usePosts, useComments } from "../../../hooks/usePosts";
 import FileUploadButton, {
@@ -136,12 +137,10 @@ export default function FeedTab({ department, user, profile }) {
                 authorRole: profile?.role ?? "student",
                 type: activeType,
                 content: content.trim(),
-                // URL only when no file attached
                 url: attachedFile ? null : url.trim() || null,
-                // File fields
                 fileId: attachedFile?.$id ?? null,
                 mimeType: attachedFile?.mimeType ?? null,
-                fileName: attachedFile?.name ?? null,
+                fileName: attachedFile?.name ?? attachedFile?.fileName ?? null,
                 sourceType: attachedFile ? "file" : url.trim() ? "link" : "none"
             });
             resetCompose();
@@ -161,7 +160,6 @@ export default function FeedTab({ department, user, profile }) {
 
     const handleRemove = useCallback(
         async postId => {
-            // Clean up storage file if the post had one
             const target = posts.find(p => p.$id === postId);
             if (target?.fileId) {
                 deleteFile(target.fileId).catch(() => {});
@@ -178,7 +176,6 @@ export default function FeedTab({ department, user, profile }) {
 
     const filtered =
         filter === "all" ? posts : posts.filter(p => p.type === filter);
-
     const typeConf = POST_TYPES.find(t => t.value === activeType);
 
     return (
@@ -272,7 +269,7 @@ export default function FeedTab({ department, user, profile }) {
                                 className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-600 transition resize-none text-sm"
                             />
 
-                            {/* Resource-specific: link OR file */}
+                            {/* Resource: link OR file */}
                             {activeType === "resource" && (
                                 <div className="flex flex-col gap-2">
                                     {!attachedFile && (
@@ -286,8 +283,6 @@ export default function FeedTab({ department, user, profile }) {
                                             className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-600 transition text-sm"
                                         />
                                     )}
-
-                                    {/* File attach (only when no link typed) */}
                                     {!url.trim() && (
                                         <div className="flex items-center gap-2">
                                             {attachedFile ? (
@@ -316,7 +311,7 @@ export default function FeedTab({ department, user, profile }) {
                                 </div>
                             )}
 
-                            {/* Non-resource: optional file attach */}
+                            {/* Non-resource: optional file */}
                             {activeType !== "resource" && (
                                 <div className="flex items-center gap-2">
                                     {attachedFile ? (
@@ -398,7 +393,7 @@ export default function FeedTab({ department, user, profile }) {
                 ))}
             </div>
 
-            {/* Posts list */}
+            {/* Posts */}
             {loading ? (
                 <div className="flex flex-col gap-3">
                     {[1, 2, 3].map(i => (
@@ -461,7 +456,7 @@ export default function FeedTab({ department, user, profile }) {
                 </div>
             )}
 
-            {/* File preview modal — shared across all post cards */}
+            {/* File preview modal */}
             <FilePreviewModal
                 file={previewFile}
                 onClose={() => setPreviewFile(null)}
@@ -506,13 +501,18 @@ const PostCard = memo(function PostCard({
             ? post.content.slice(0, TRUNCATE_AT).trimEnd() + "…"
             : post.content;
 
-    // ── File attachment detection ──────────────────────────────────────────
-    // Use explicit check: sourceType must be "file" AND fileId must exist
-    const hasFile = post.sourceType === "file" && !!post.fileId;
+    // ── File detection — check BOTH sourceType and fileId ──
+    // sourceType can be "file", but fileId must also exist
+    // Guard against null/undefined/empty string for both
+    const hasFile = post.sourceType === "file" && Boolean(post.fileId);
     const fileType = hasFile ? getFileType(post.mimeType ?? "") : null;
 
-    // Debug helper — remove after confirming it works
-    // console.log(`[PostCard ${post.$id}] sourceType=${post.sourceType} fileId=${post.fileId} hasFile=${hasFile}`);
+    // ── Link detection — only when no file attached ──
+    const hasLink =
+        !hasFile &&
+        post.type === "resource" &&
+        Boolean(post.url) &&
+        post.sourceType !== "file";
 
     return (
         <motion.div
@@ -610,22 +610,20 @@ const PostCard = memo(function PostCard({
                     )}
                 </div>
 
-                {/* Resource URL link (only when no file attached) */}
-                {post.type === "resource" &&
-                    post.url &&
-                    post.sourceType !== "file" && (
-                        <a
-                            href={post.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400 text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors"
-                        >
-                            <ExternalLink size={14} className="shrink-0" />
-                            <span className="truncate">{post.url}</span>
-                        </a>
-                    )}
+                {/* Resource URL link */}
+                {hasLink && (
+                    <a
+                        href={post.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400 text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors"
+                    >
+                        <ExternalLink size={14} className="shrink-0" />
+                        <span className="truncate">{post.url}</span>
+                    </a>
+                )}
 
-                {/* ── File attachment card ── */}
+                {/* File attachment */}
                 {hasFile && (
                     <FileAttachmentCard
                         fileId={post.fileId}
@@ -705,7 +703,7 @@ const PostCard = memo(function PostCard({
                         </AnimatePresence>
                     </div>
 
-                    {/* Comments toggle */}
+                    {/* Comments */}
                     <button
                         onClick={() => setShowComments(v => !v)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -746,8 +744,7 @@ const PostCard = memo(function PostCard({
     );
 });
 
-// ── FileAttachmentCard ─────────────────────────────────────────────────────────
-// Standalone component — takes explicit props, no chance of prop shadowing
+// ── FileAttachmentCard ────────────────────────────────────────────────────────
 
 function FileAttachmentCard({
     fileId,
@@ -765,7 +762,6 @@ function FileAttachmentCard({
     if (fileType === "image") {
         return (
             <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700">
-                {/* Clickable image */}
                 <button
                     type="button"
                     onClick={handlePreview}
@@ -776,9 +772,17 @@ function FileAttachmentCard({
                         alt={fileName || "Image attachment"}
                         className="w-full max-h-72 object-cover hover:opacity-95 transition-opacity"
                         loading="lazy"
+                        onError={e => {
+                            // If image fails to load, show placeholder
+                            e.target.style.display = "none";
+                            e.target.nextSibling?.classList.remove("hidden");
+                        }}
                     />
+                    {/* Fallback if image src fails */}
+                    <div className="hidden p-8 flex items-center justify-center">
+                        <Image size={32} className="text-slate-300" />
+                    </div>
                 </button>
-                {/* Footer bar */}
                 <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800 flex items-center gap-2">
                     <Image size={13} className="text-violet-500 shrink-0" />
                     <span className="text-xs text-slate-500 dark:text-slate-400 truncate flex-1">
@@ -844,7 +848,7 @@ function FileAttachmentCard({
         );
     }
 
-    // Fallback for other file types
+    // DOC or other
     return (
         <a
             href={downloadUrl}
@@ -852,7 +856,7 @@ function FileAttachmentCard({
             rel="noopener noreferrer"
             className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
         >
-            <FileText size={18} className="text-slate-500 shrink-0" />
+            <File size={18} className="text-slate-500 shrink-0" />
             <span className="text-sm font-medium text-slate-600 dark:text-slate-400 truncate flex-1">
                 {fileName || "Attachment"}
             </span>

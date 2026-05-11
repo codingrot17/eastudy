@@ -8,21 +8,27 @@ export const COMMENTS_ID = import.meta.env.VITE_APPWRITE_COMMENTS_COLLECTION_ID;
 export function parsePost(doc) {
     let reactions = {};
     try {
-        reactions = typeof doc.reactions === "string"
-            ? JSON.parse(doc.reactions || "{}")
-            : (doc.reactions ?? {});
+        reactions =
+            typeof doc.reactions === "string"
+                ? JSON.parse(doc.reactions || "{}")
+                : (doc.reactions ?? {});
     } catch {
         reactions = {};
     }
+
+    // sourceType: Appwrite may return null, undefined, or empty string
+    const sourceType = doc.sourceType || "none";
+
     return {
         ...doc,
         reactions,
         fileId: doc.fileId ?? null,
         mimeType: doc.mimeType ?? null,
         fileName: doc.fileName ?? null,
-        sourceType: doc.sourceType ?? "none"
+        sourceType // always a real string
     };
 }
+
 // ── Posts ────────────────────────────────────────
 
 export async function getPosts(departmentId, limit = 30) {

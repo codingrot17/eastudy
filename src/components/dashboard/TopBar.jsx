@@ -2,8 +2,21 @@ import { BookOpen, LogOut, Bell, Download } from "lucide-react";
 import ThemeToggle from "../ui/ThemeToggle";
 import { usePWAContext } from "../pwa/PWAProvider";
 
-export default function TopBar({ user, role, onLogout, loggingOut }) {
+export default function TopBar({
+    user,
+    department,
+    role,
+    onLogout,
+    loggingOut
+}) {
     const pwa = usePWAContext();
+
+    const handleBellClick = () => {
+        if (pwa?.notifPermission === "default") {
+            // Pass user + department so the subscription gets saved correctly
+            pwa?.requestNotifPermission(user?.$id, department?.$id);
+        }
+    };
 
     return (
         <header className="lg:hidden sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
@@ -23,9 +36,9 @@ export default function TopBar({ user, role, onLogout, loggingOut }) {
                     </div>
                 </div>
 
-                {/* Right */}
+                {/* Right actions */}
                 <div className="flex items-center gap-1">
-                    {/* Install button — always show if installable */}
+                    {/* Install button */}
                     {pwa?.canInstall && (
                         <button
                             onClick={pwa.install}
@@ -40,29 +53,28 @@ export default function TopBar({ user, role, onLogout, loggingOut }) {
 
                     <ThemeToggle />
 
-                    {/* Notification bell */}
+                    {/* Notification bell — correct args now */}
                     <button
-                        onClick={() => {
-                            if (pwa?.notifPermission === "default") {
-                                pwa?.requestNotifPermission(
-                                    user?.$id,
-                                    department?.$id
-                                );
-                            }
-                        }}
+                        onClick={handleBellClick}
                         className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative"
                         title={
                             pwa?.notifPermission === "granted"
                                 ? "Notifications on"
-                                : "Enable notifications"
+                                : pwa?.notifPermission === "denied"
+                                  ? "Notifications blocked"
+                                  : "Enable notifications"
                         }
                     >
                         <Bell size={20} />
-                        {pwa?.notifPermission === "granted" ? (
+                        {pwa?.notifPermission === "granted" && (
                             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-green-500 rounded-full" />
-                        ) : pwa?.notifPermission === "default" ? (
+                        )}
+                        {pwa?.notifPermission === "default" && (
                             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
-                        ) : null}
+                        )}
+                        {pwa?.notifPermission === "denied" && (
+                            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-400 rounded-full" />
+                        )}
                     </button>
 
                     <button

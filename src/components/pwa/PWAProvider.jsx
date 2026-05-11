@@ -22,8 +22,6 @@ function isInStandaloneMode() {
     );
 }
 
-// Only prompt to install when the user is actually using the app,
-// not while they're on the landing page or auth pages.
 function useIsDashboard() {
     const { pathname } = useLocation();
     return pathname.startsWith("/dashboard");
@@ -32,8 +30,6 @@ function useIsDashboard() {
 export default function PWAProvider({ children }) {
     const pwa = usePWA();
     const isDashboard = useIsDashboard();
-
-    // Moved inside the component body
     const { user, department } = useAuthStore();
 
     const [showInstallBanner, setShowInstallBanner] = useState(false);
@@ -47,7 +43,7 @@ export default function PWAProvider({ children }) {
         () => sessionStorage.getItem("ios-prompt-dismissed") === "true"
     );
 
-    // Android/Desktop install banner — dashboard only, after 3s
+    // ── Install banner — dashboard only, after 3s ──
     useEffect(() => {
         if (!isDashboard) {
             setShowInstallBanner(false);
@@ -59,7 +55,7 @@ export default function PWAProvider({ children }) {
         }
     }, [pwa.canInstall, bannerDismissed, isDashboard]);
 
-    // iOS guide — dashboard only, after 4s
+    // ── iOS guide — dashboard only, after 4s ──
     useEffect(() => {
         if (!isDashboard) {
             setShowIOSGuide(false);
@@ -71,7 +67,7 @@ export default function PWAProvider({ children }) {
         }
     }, [iosDismissed, isDashboard]);
 
-    // Notification prompt — dashboard only, after install banners have had time
+    // ── Notification prompt — dashboard only, after banners clear ──
     useEffect(() => {
         if (!isDashboard) {
             setShowNotifPrompt(false);
@@ -107,6 +103,7 @@ export default function PWAProvider({ children }) {
         }
     };
 
+    // ── Always pass user.$id + department.$id to permission requests ──
     const handleEnableNotifs = async () => {
         await pwa.requestNotifPermission(user?.$id, department?.$id);
         setShowNotifPrompt(false);
@@ -114,7 +111,17 @@ export default function PWAProvider({ children }) {
 
     return (
         <PWAContext.Provider
-            value={{ ...pwa, setShowInstallBanner, setShowNotifPrompt }}
+            value={{
+                ...pwa,
+                setShowInstallBanner,
+                setShowNotifPrompt,
+                // Expose a bound version so callers don't need to pass args
+                requestNotifPermission: (uid, deptId) =>
+                    pwa.requestNotifPermission(
+                        uid ?? user?.$id,
+                        deptId ?? department?.$id
+                    )
+            }}
         >
             {children}
 
@@ -180,7 +187,7 @@ export default function PWAProvider({ children }) {
                 )}
             </AnimatePresence>
 
-            {/* ── iOS "Add to Home Screen" Guide ── */}
+            {/* ── iOS Add to Home Screen Guide ── */}
             <AnimatePresence>
                 {showIOSGuide && (
                     <motion.div
@@ -306,8 +313,9 @@ export default function PWAProvider({ children }) {
                                         Never miss an update
                                     </p>
                                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                        Get notified instantly for announcements
-                                        and schedule changes.
+                                        Get notified instantly for
+                                        announcements, schedule changes, and new
+                                        quizzes.
                                     </p>
                                     <div className="flex items-center gap-2 mt-3">
                                         <button

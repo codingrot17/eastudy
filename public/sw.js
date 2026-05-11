@@ -1,9 +1,7 @@
-const SHELL_CACHE = "eastudy-shell-v2";
-const DATA_CACHE = "eastudy-data-v2";
+const SHELL_CACHE = "eastudy-shell-v3";
+const DATA_CACHE = "eastudy-data-v3";
 const STATIC_ASSETS = ["/", "/index.html", "/manifest.json", "/favicon.svg"];
 
-// How long to serve Appwrite GET responses from cache before going to network
-// This means on a slow/dead connection students still see their last-known schedule
 const DATA_CACHE_MAX_AGE_SECONDS = 300; // 5 minutes
 
 // ── Install ─────────────────────────────────────
@@ -38,6 +36,7 @@ self.addEventListener("fetch", event => {
 
     if (request.method !== "GET") return;
 
+    // Navigate: try network, fall back to shell
     if (request.mode === "navigate") {
         event.respondWith(
             fetch(request).catch(() => caches.match("/index.html"))
@@ -45,6 +44,7 @@ self.addEventListener("fetch", event => {
         return;
     }
 
+    // Appwrite API: stale-while-revalidate with TTL
     if (
         url.hostname.includes("appwrite.io") ||
         url.hostname.includes("cloud.appwrite")
@@ -67,17 +67,17 @@ self.addEventListener("fetch", event => {
                 try {
                     const response = await fetch(request);
                     if (response.ok) {
-                        // ← FIX: read body once, construct new response
                         const body = await response.arrayBuffer();
                         const headers = new Headers(response.headers);
                         headers.set("sw-cached-at", Date.now().toString());
-                        const toCacheResponse = new Response(body, {
-                            status: response.status,
-                            statusText: response.statusText,
-                            headers
-                        });
-                        cache.put(request, toCacheResponse);
-                        // Return a fresh response from the same body
+                        cache.put(
+                            request,
+                            new Response(body, {
+                                status: response.status,
+                                statusText: response.statusText,
+                                headers
+                            })
+                        );
                         return new Response(body, {
                             status: response.status,
                             statusText: response.statusText,
@@ -94,6 +94,7 @@ self.addEventListener("fetch", event => {
         return;
     }
 
+    // Shell assets: cache-first
     event.respondWith(
         caches.open(SHELL_CACHE).then(async cache => {
             const cached = await cache.match(request);
@@ -108,7 +109,6 @@ self.addEventListener("fetch", event => {
     );
 });
 
-// Also fix revalidateInBackground the same way:
 function revalidateInBackground(request, cache) {
     fetch(request)
         .then(async response => {
@@ -130,12 +130,13 @@ function revalidateInBackground(request, cache) {
 
 // ── Push Notifications ──────────────────────────
 self.addEventListener("push", event => {
+    // Default payload if nothing comes through
     let data = {
         title: "Eastudy",
         body: "You have a new update",
         icon: "/favicon.svg",
         tag: "eastudy-update",
-        url: "/"
+        url: "/dashboard/student"
     };
 
     if (event.data) {
@@ -147,28 +148,44 @@ self.addEventListener("push", event => {
         }
     }
 
-    event.waitUntil(
-        self.registration.showNotification(data.title, {
-            body: data.body,
-            icon: data.icon || "/favicon.svg",
-            badge: "/favicon.svg",
-            tag: data.tag || "eastudy-update",
-            renotify: true,
-            vibrate: [200, 100, 200],
-            data: { url: data.url || "/" },
-            actions: data.actions || []
-        })
-    );
+    // Increment badge count
+    const badgePromise = self.navigator?.setAppBadge
+        ? self.navigator.setAppBadge(1).catch(() => {})
+        : Promise.resolve();
+
+    const notifPromise = self.registration.showNotification(data.title, {
+        body: data.body,
+        icon: data.icon || "/favicon.svg",
+        badge: "/favicon.svg",
+        tag: data.tag || "eastudy-update",
+        // renotify: true ensures the notification appears even if same tag exists
+        renotify: true,
+        vibrate: [200, 100, 200],
+        // Store the URL in data so notificationclick can use it
+        data: { url: data.url || "/dashboard/student" },
+        // Actions (optional — shown on Android)
+        actions: data.actions || []
+    });
+
+    event.waitUntil(Promise.all([notifPromise, badgePromise]));
 });
+
 // ── Notification click ──────────────────────────
 self.addEventListener("notificationclick", event => {
     event.notification.close();
+
     const url = event.notification.data?.url || "/";
+
+    // Clear badge when user taps notification
+    if (self.navigator?.clearAppBadge) {
+        self.navigator.clearAppBadge().catch(() => {});
+    }
 
     event.waitUntil(
         self.clients
             .matchAll({ type: "window", includeUncontrolled: true })
             .then(clients => {
+                // If the app is already open, focus and navigate it
                 const existing = clients.find(c =>
                     c.url.includes(self.location.origin)
                 );
@@ -176,6 +193,7 @@ self.addEventListener("notificationclick", event => {
                     existing.focus();
                     existing.navigate(url);
                 } else {
+                    // Otherwise open a new window
                     self.clients.openWindow(url);
                 }
             })
@@ -190,24 +208,29 @@ self.addEventListener("sync", event => {
 });
 
 async function syncPending() {
+    // Placeholder for future background sync logic
     console.log("[SW] Background sync triggered");
 }
 
 // ── Message handler ─────────────────────────────
 self.addEventListener("message", event => {
-    if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+    if (event.data?.type === "SKIP_WAITING") {
+        self.skipWaiting();
+    }
 
     if (event.data?.type === "SET_BADGE") {
         const count = event.data.count || 0;
         if (self.navigator?.setAppBadge) {
-            count > 0
-                ? self.navigator.setAppBadge(count)
-                : self.navigator.clearAppBadge();
+            const op =
+                count > 0
+                    ? self.navigator.setAppBadge(count)
+                    : self.navigator.clearAppBadge();
+            op.catch(() => {});
         }
     }
 
-    // Allow pages to clear the data cache (e.g. after logout)
+    // Clear data cache on logout so fresh data loads on next login
     if (event.data?.type === "CLEAR_DATA_CACHE") {
-        caches.delete(DATA_CACHE);
+        caches.delete(DATA_CACHE).catch(() => {});
     }
 });
