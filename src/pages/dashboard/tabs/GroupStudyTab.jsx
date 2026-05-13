@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Users,
@@ -15,9 +15,26 @@ import {
     Trash2,
     Ban,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    MessageCircle,
+    Send,
+    ArrowLeft,
+    Image,
+    FileText,
+    Download,
+    File
 } from "lucide-react";
 import { useGroupStudy } from "../../../hooks/useGroupStudy";
+import { useSessionChat } from "../../../hooks/useSessionChat";
+import FileUploadButton, {
+    FileAttachmentChip
+} from "../../../components/ui/FileUploadButton";
+import {
+    getFileViewUrl,
+    getFileDownloadUrl,
+    getFileType
+} from "../../../appwrite/storage";
+import { deleteFile } from "../../../appwrite/storage";
 import Button from "../../../components/ui/Button";
 
 const emptyForm = {
@@ -28,7 +45,9 @@ const emptyForm = {
     maxSlots: ""
 };
 
-export default function GroupStudyTab({ department, user }) {
+// ── Main Tab ─────────────────────────────────────
+
+export default function GroupStudyTab({ department, user, profile }) {
     const {
         sessions,
         loading,
@@ -45,23 +64,27 @@ export default function GroupStudyTab({ department, user }) {
     const [form, setForm] = useState(emptyForm);
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState("");
-    const [actionId, setActionId] = useState(null); // tracks which card is mid-action
+    const [actionId, setActionId] = useState(null);
     const [expandedId, setExpandedId] = useState(null);
+
+    // ── Chat room state ──────────────────────────
+    // null = list view, string = session $id open in chat
+    const [chatSessionId, setChatSessionId] = useState(null);
+    const chatSession = sessions.find(s => s.$id === chatSessionId) ?? null;
 
     const upcomingSessions = sessions.filter(s => {
         if (s.status === "cancelled") return false;
-        const sessionDate = new Date(s.date + "T00:00:00");
+        const d = new Date(s.date + "T00:00:00");
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        return sessionDate >= today;
+        return d >= today;
     });
-
     const pastOrCancelled = sessions.filter(s => {
         if (s.status === "cancelled") return true;
-        const sessionDate = new Date(s.date + "T00:00:00");
+        const d = new Date(s.date + "T00:00:00");
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        return sessionDate < today;
+        return d < today;
     });
 
     const handleChange = e =>
@@ -102,7 +125,6 @@ export default function GroupStudyTab({ department, user }) {
             setActionId(null);
         }
     };
-
     const handleLeave = async s => {
         setActionId(s.$id);
         try {
@@ -111,7 +133,6 @@ export default function GroupStudyTab({ department, user }) {
             setActionId(null);
         }
     };
-
     const handleCancel = async id => {
         setActionId(id);
         try {
@@ -120,7 +141,6 @@ export default function GroupStudyTab({ department, user }) {
             setActionId(null);
         }
     };
-
     const handleDelete = async id => {
         setActionId(id);
         try {
@@ -134,6 +154,20 @@ export default function GroupStudyTab({ department, user }) {
     const isFull = s => s.maxSlots > 0 && s.attendees.length >= s.maxSlots;
     const isOwner = s => s.createdBy === user?.$id;
 
+    // ── Chat room view ───────────────────────────
+    if (chatSession) {
+        return (
+            <ChatRoom
+                session={chatSession}
+                user={user}
+                profile={profile}
+                departmentId={department?.$id}
+                onBack={() => setChatSessionId(null)}
+            />
+        );
+    }
+
+    // ── Session list view ────────────────────────
     return (
         <div className="flex flex-col gap-6">
             {/* Header */}
@@ -153,13 +187,11 @@ export default function GroupStudyTab({ department, user }) {
                         <RefreshCw size={18} />
                     </button>
                     <Button size="sm" onClick={() => setShowForm(v => !v)}>
-                        <Plus size={16} className="mr-1" />
-                        New Session
+                        <Plus size={16} className="mr-1" /> New Session
                     </Button>
                 </div>
             </div>
 
-            {/* Error */}
             {error && (
                 <div className="flex items-center gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl px-4 py-3">
                     <AlertCircle size={16} className="text-red-500 shrink-0" />
@@ -208,7 +240,7 @@ export default function GroupStudyTab({ department, user }) {
                         <input
                             name="location"
                             type="text"
-                            placeholder="Where? (e.g. Faculty library, room 3 — or a link)"
+                            placeholder="Where? (e.g. Faculty library, room 3)"
                             value={form.location}
                             onChange={handleChange}
                             required
@@ -292,7 +324,7 @@ export default function GroupStudyTab({ department, user }) {
                 )}
             </AnimatePresence>
 
-            {/* Loading skeletons */}
+            {/* Loading */}
             {loading ? (
                 <div className="flex flex-col gap-3">
                     {[1, 2].map(i => (
@@ -304,7 +336,6 @@ export default function GroupStudyTab({ department, user }) {
                 </div>
             ) : upcomingSessions.length === 0 &&
               pastOrCancelled.length === 0 ? (
-                // Empty state
                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-10 flex flex-col items-center gap-3 text-center">
                     <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
                         <Users size={24} className="text-emerald-500" />
@@ -325,7 +356,6 @@ export default function GroupStudyTab({ department, user }) {
                 </div>
             ) : (
                 <div className="flex flex-col gap-6">
-                    {/* Upcoming sessions */}
                     {upcomingSessions.length > 0 && (
                         <div className="flex flex-col gap-3">
                             <p className="text-xs font-bold uppercase tracking-widest text-slate-400 px-1">
@@ -350,13 +380,14 @@ export default function GroupStudyTab({ department, user }) {
                                         onLeave={() => handleLeave(s)}
                                         onCancel={() => handleCancel(s.$id)}
                                         onDelete={() => handleDelete(s.$id)}
+                                        onOpenChat={() =>
+                                            setChatSessionId(s.$id)
+                                        }
                                     />
                                 ))}
                             </AnimatePresence>
                         </div>
                     )}
-
-                    {/* Past / cancelled */}
                     {pastOrCancelled.length > 0 && (
                         <div className="flex flex-col gap-3">
                             <p className="text-xs font-bold uppercase tracking-widest text-slate-400 px-1">
@@ -380,6 +411,7 @@ export default function GroupStudyTab({ department, user }) {
                                     onLeave={() => handleLeave(s)}
                                     onCancel={() => handleCancel(s.$id)}
                                     onDelete={() => handleDelete(s.$id)}
+                                    onOpenChat={() => setChatSessionId(s.$id)}
                                     muted
                                 />
                             ))}
@@ -405,7 +437,8 @@ function SessionCard({
     onLeave,
     onCancel,
     onDelete,
-    muted = false
+    onOpenChat,
+    muted
 }) {
     const isCancelled = s.status === "cancelled";
     const attendeeCount = s.attendees.length;
@@ -425,16 +458,11 @@ function SessionCard({
                       : "border-slate-100 dark:border-slate-800"
             }`}
         >
-            {/* Main row */}
             <div className="p-5 flex flex-col gap-3">
                 {/* Title row */}
                 <div className="flex items-start gap-3">
                     <div
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                            isCancelled
-                                ? "bg-slate-100 dark:bg-slate-800"
-                                : "bg-emerald-50 dark:bg-emerald-900/20"
-                        }`}
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isCancelled ? "bg-slate-100 dark:bg-slate-800" : "bg-emerald-50 dark:bg-emerald-900/20"}`}
                     >
                         <Users
                             size={18}
@@ -445,7 +473,6 @@ function SessionCard({
                             }
                         />
                     </div>
-
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-bold text-sm truncate">
@@ -473,7 +500,7 @@ function SessionCard({
                     </div>
                 </div>
 
-                {/* Meta row */}
+                {/* Meta */}
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                     <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                         <Calendar size={12} />
@@ -491,9 +518,9 @@ function SessionCard({
                     </span>
                 </div>
 
-                {/* Attendees + actions row */}
-                <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-100 dark:border-slate-800">
-                    {/* Attendee count + toggle */}
+                {/* Attendees + actions */}
+                <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-100 dark:border-slate-800 flex-wrap gap-y-2">
+                    {/* Attendee count */}
                     <button
                         onClick={onToggleExpand}
                         className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
@@ -525,14 +552,24 @@ function SessionCard({
                     </button>
 
                     {/* Action buttons */}
-                    {!isCancelled && (
-                        <div className="flex items-center gap-1.5">
-                            {isOwner ? (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* Chat button — always visible for non-cancelled sessions */}
+                        {!isCancelled && (
+                            <button
+                                onClick={onOpenChat}
+                                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl text-primary-700 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors"
+                            >
+                                <MessageCircle size={13} />
+                                Chat
+                            </button>
+                        )}
+
+                        {!isCancelled &&
+                            (isOwner ? (
                                 <>
                                     <button
                                         onClick={onCancel}
                                         disabled={isLoading}
-                                        title="Cancel session"
                                         className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-xl text-orange-600 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 transition-colors disabled:opacity-50"
                                     >
                                         {isLoading ? (
@@ -542,13 +579,12 @@ function SessionCard({
                                             />
                                         ) : (
                                             <Ban size={12} />
-                                        )}
+                                        )}{" "}
                                         Cancel
                                     </button>
                                     <button
                                         onClick={onDelete}
                                         disabled={isLoading}
-                                        title="Delete session"
                                         className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors disabled:opacity-50"
                                     >
                                         <Trash2 size={14} />
@@ -567,7 +603,7 @@ function SessionCard({
                                         />
                                     ) : (
                                         <UserMinus size={12} />
-                                    )}
+                                    )}{" "}
                                     Leave
                                 </button>
                             ) : (
@@ -586,24 +622,22 @@ function SessionCard({
                                     )}
                                     {isFull ? "Full" : "Join"}
                                 </button>
-                            )}
-                        </div>
-                    )}
+                            ))}
 
-                    {/* Owner can delete cancelled sessions */}
-                    {isCancelled && isOwner && (
-                        <button
-                            onClick={onDelete}
-                            disabled={isLoading}
-                            className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors disabled:opacity-50"
-                        >
-                            <Trash2 size={14} />
-                        </button>
-                    )}
+                        {isCancelled && isOwner && (
+                            <button
+                                onClick={onDelete}
+                                disabled={isLoading}
+                                className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors disabled:opacity-50"
+                            >
+                                <Trash2 size={14} />
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {/* Expanded attendees list */}
+            {/* Expanded attendees */}
             <AnimatePresence initial={false}>
                 {expanded && attendeeCount > 0 && (
                     <motion.div
@@ -640,7 +674,364 @@ function SessionCard({
     );
 }
 
-// ── Helpers ──────────────────────────────────────
+// ── Chat Room ─────────────────────────────────────
+
+function ChatRoom({ session, user, profile, departmentId, onBack }) {
+    const { messages, loading, sending, send, remove } = useSessionChat(
+        session.$id,
+        departmentId
+    );
+
+    const [text, setText] = useState("");
+    const [attachedFile, setAttachedFile] = useState(null);
+    const [sendError, setSendError] = useState("");
+    const bottomRef = useRef(null);
+    const inputRef = useRef(null);
+
+    // Auto-scroll to bottom on new messages
+    useEffect(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages.length]);
+
+    const handleSend = async e => {
+        e.preventDefault();
+        if (!text.trim() && !attachedFile) return;
+        setSendError("");
+
+        try {
+            await send({
+                authorId: user?.$id,
+                authorName: user?.name,
+                authorRole: profile?.role ?? "student",
+                content: text.trim() || null,
+                fileId: attachedFile?.$id ?? null,
+                mimeType: attachedFile?.mimeType ?? null,
+                fileName: attachedFile?.name ?? attachedFile?.fileName ?? null,
+                sourceType: attachedFile ? "file" : "none"
+            });
+            setText("");
+            setAttachedFile(null);
+            inputRef.current?.focus();
+        } catch (err) {
+            setSendError("Failed to send. Try again.");
+        }
+    };
+
+    const handleRemoveMsg = async msg => {
+        if (msg.fileId) deleteFile(msg.fileId).catch(() => {});
+        await remove(msg.$id);
+    };
+
+    const canDelete = msg =>
+        msg.authorId === user?.$id ||
+        profile?.role === "rep" ||
+        profile?.role === "assistant";
+
+    const isToday = session.date === new Date().toISOString().split("T")[0];
+
+    return (
+        <div className="flex flex-col h-[calc(100vh-10rem)] lg:h-[calc(100vh-6rem)]">
+            {/* Chat header */}
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                <button
+                    onClick={onBack}
+                    className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                    <ArrowLeft size={18} />
+                </button>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center shrink-0">
+                    <Users size={18} className="text-emerald-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm truncate">
+                        {session.title}
+                    </p>
+                    <div className="flex items-center gap-3 mt-0.5">
+                        <span className="flex items-center gap-1 text-xs text-slate-400">
+                            <Calendar size={10} />
+                            {formatDate(session.date)}
+                        </span>
+                        <span className="flex items-center gap-1 text-xs text-slate-400">
+                            <Clock size={10} />
+                            {formatTime(session.time)}
+                        </span>
+                        <span className="flex items-center gap-1 text-xs text-slate-400">
+                            <Users size={10} />
+                            {session.attendees.length} joined
+                        </span>
+                    </div>
+                </div>
+                {isToday && (
+                    <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                        LIVE
+                    </span>
+                )}
+            </div>
+
+            {/* Messages area */}
+            <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-3 min-h-0">
+                {loading ? (
+                    <div className="flex flex-col gap-3 px-1">
+                        {[1, 2, 3].map(i => (
+                            <div
+                                key={i}
+                                className={`flex gap-2 ${i % 2 === 0 ? "flex-row-reverse" : ""}`}
+                            >
+                                <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0 animate-pulse" />
+                                <div className="h-10 bg-slate-100 dark:bg-slate-800 rounded-2xl animate-pulse w-48" />
+                            </div>
+                        ))}
+                    </div>
+                ) : messages.length === 0 ? (
+                    <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6 py-12">
+                        <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
+                            <MessageCircle
+                                size={24}
+                                className="text-emerald-500"
+                            />
+                        </div>
+                        <p className="font-semibold text-slate-500 dark:text-slate-400">
+                            No messages yet
+                        </p>
+                        <p className="text-sm text-slate-400 max-w-xs">
+                            Be the first to say something! Share notes, links,
+                            or just coordinate.
+                        </p>
+                    </div>
+                ) : (
+                    <>
+                        {messages.map((msg, idx) => {
+                            const isMe = msg.authorId === user?.$id;
+                            const showAvatar =
+                                idx === 0 ||
+                                messages[idx - 1]?.authorId !== msg.authorId;
+                            const isOptimistic = msg._optimistic;
+
+                            return (
+                                <ChatMessage
+                                    key={msg.$id}
+                                    msg={msg}
+                                    isMe={isMe}
+                                    showAvatar={showAvatar}
+                                    isOptimistic={isOptimistic}
+                                    canDelete={canDelete(msg)}
+                                    onDelete={() => handleRemoveMsg(msg)}
+                                />
+                            );
+                        })}
+                        <div ref={bottomRef} />
+                    </>
+                )}
+            </div>
+
+            {/* Attached file preview */}
+            {attachedFile && (
+                <div className="px-1 pb-2 shrink-0">
+                    <FileAttachmentChip
+                        file={attachedFile}
+                        onRemove={() => setAttachedFile(null)}
+                    />
+                </div>
+            )}
+
+            {sendError && (
+                <p className="text-xs text-red-500 px-1 pb-1 shrink-0">
+                    {sendError}
+                </p>
+            )}
+
+            {/* Input bar */}
+            <form
+                onSubmit={handleSend}
+                className="flex items-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 shrink-0"
+            >
+                {/* File attach button */}
+                <FileUploadButton
+                    onUpload={f => {
+                        setAttachedFile(f);
+                        setSendError("");
+                    }}
+                    disabled={sending || !!attachedFile}
+                    size="sm"
+                />
+
+                <div className="flex-1 relative">
+                    <textarea
+                        ref={inputRef}
+                        value={text}
+                        onChange={e => setText(e.target.value)}
+                        onKeyDown={e => {
+                            // Cmd/Ctrl+Enter or just Enter on desktop sends
+                            if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSend(e);
+                            }
+                        }}
+                        placeholder="Type a message… (Enter to send)"
+                        rows={1}
+                        maxLength={1000}
+                        className="w-full px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-600 transition resize-none text-sm leading-relaxed"
+                        style={{ maxHeight: "120px", overflowY: "auto" }}
+                    />
+                </div>
+
+                <button
+                    type="submit"
+                    disabled={sending || (!text.trim() && !attachedFile)}
+                    className="w-10 h-10 rounded-2xl bg-primary-700 hover:bg-primary-600 flex items-center justify-center transition-colors disabled:opacity-40 shrink-0 self-end"
+                >
+                    {sending ? (
+                        <Loader2
+                            size={16}
+                            className="animate-spin text-white"
+                        />
+                    ) : (
+                        <Send size={16} className="text-white" />
+                    )}
+                </button>
+            </form>
+        </div>
+    );
+}
+
+// ── Chat Message ──────────────────────────────────
+
+function ChatMessage({
+    msg,
+    isMe,
+    showAvatar,
+    isOptimistic,
+    canDelete,
+    onDelete
+}) {
+    const [showDelete, setShowDelete] = useState(false);
+
+    const hasFile = msg.sourceType === "file" && Boolean(msg.fileId);
+    const fileType = hasFile ? getFileType(msg.mimeType ?? "") : null;
+    const viewUrl = hasFile ? getFileViewUrl(msg.fileId) : null;
+    const downloadUrl = hasFile ? getFileDownloadUrl(msg.fileId) : null;
+
+    return (
+        <div
+            className={`flex gap-2 items-end group ${isMe ? "flex-row-reverse" : ""}`}
+            onTouchStart={() => canDelete && setShowDelete(v => !v)}
+        >
+            {/* Avatar */}
+            <div
+                className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center ${showAvatar ? "opacity-100" : "opacity-0"} bg-gradient-to-br from-primary-700 to-cyan-500`}
+            >
+                <span className="text-white text-[10px] font-bold">
+                    {msg.authorName?.[0]?.toUpperCase() ?? "?"}
+                </span>
+            </div>
+
+            <div
+                className={`flex flex-col gap-1 max-w-[75%] ${isMe ? "items-end" : "items-start"}`}
+            >
+                {/* Author name — only on first msg in group */}
+                {showAvatar && !isMe && (
+                    <div className="flex items-center gap-1.5 px-1">
+                        <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                            {msg.authorName}
+                        </span>
+                        {msg.authorRole !== "student" && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 capitalize">
+                                {msg.authorRole}
+                            </span>
+                        )}
+                    </div>
+                )}
+
+                {/* Bubble */}
+                <div
+                    className={`relative rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                        isMe
+                            ? "bg-primary-700 text-white rounded-br-sm"
+                            : "bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-bl-sm"
+                    } ${isOptimistic ? "opacity-60" : ""}`}
+                >
+                    {/* Text content */}
+                    {msg.content && (
+                        <p className="whitespace-pre-wrap break-words">
+                            {msg.content}
+                        </p>
+                    )}
+
+                    {/* File attachment inline */}
+                    {hasFile && fileType === "image" && (
+                        <a
+                            href={viewUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block mt-2"
+                        >
+                            <img
+                                src={viewUrl}
+                                alt={msg.fileName || "Image"}
+                                className="max-w-full rounded-xl max-h-48 object-cover"
+                                loading="lazy"
+                            />
+                        </a>
+                    )}
+                    {hasFile && fileType === "pdf" && (
+                        <a
+                            href={downloadUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`flex items-center gap-2 mt-2 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                                isMe
+                                    ? "bg-white/20 hover:bg-white/30 text-white"
+                                    : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-800"
+                            }`}
+                        >
+                            <FileText size={14} />
+                            {msg.fileName || "PDF Document"}
+                            <Download size={12} className="ml-auto" />
+                        </a>
+                    )}
+                    {hasFile &&
+                        (fileType === "doc" || fileType === "other") && (
+                            <a
+                                href={downloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`flex items-center gap-2 mt-2 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                                    isMe
+                                        ? "bg-white/20 hover:bg-white/30 text-white"
+                                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                                }`}
+                            >
+                                <File size={14} />
+                                {msg.fileName || "Attachment"}
+                                <Download size={12} className="ml-auto" />
+                            </a>
+                        )}
+
+                    {/* Timestamp */}
+                    <p
+                        className={`text-[10px] mt-1 ${isMe ? "text-white/60 text-right" : "text-slate-400"}`}
+                    >
+                        {formatMsgTime(msg.$createdAt)}
+                    </p>
+                </div>
+            </div>
+
+            {/* Delete button — visible on hover (desktop) or tap (mobile) */}
+            {canDelete && (
+                <button
+                    onClick={onDelete}
+                    className={`p-1.5 rounded-lg text-slate-300 dark:text-slate-700 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-all shrink-0 self-center
+                        ${showDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"}
+                    `}
+                >
+                    <X size={13} />
+                </button>
+            )}
+        </div>
+    );
+}
+
+// ── Helpers ───────────────────────────────────────
 
 function formatDate(dateStr) {
     if (!dateStr) return "";
@@ -648,11 +1039,9 @@ function formatDate(dateStr) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const diff = Math.round((d - today) / 86400000);
-
     if (diff === 0) return "Today";
     if (diff === 1) return "Tomorrow";
     if (diff === -1) return "Yesterday";
-
     return d.toLocaleDateString("en-US", {
         weekday: "short",
         month: "short",
@@ -664,6 +1053,24 @@ function formatTime(timeStr) {
     if (!timeStr) return "";
     const [h, m] = timeStr.split(":").map(Number);
     const period = h >= 12 ? "PM" : "AM";
-    const hour = h % 12 || 12;
-    return `${hour}:${String(m).padStart(2, "0")} ${period}`;
+    return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+function formatMsgTime(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    if (sameDay) {
+        return d.toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit"
+        });
+    }
+    return d.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+    });
 }
