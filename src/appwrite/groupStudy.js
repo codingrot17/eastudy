@@ -38,7 +38,9 @@ export async function createSession({
     location,
     date,
     time,
-    maxSlots
+    maxSlots,
+    isPrivate = false, // ← new
+    password = null // ← new
 }) {
     return await databases.createDocument(DB_ID, GROUP_STUDY_ID, ID.unique(), {
         departmentId,
@@ -50,7 +52,9 @@ export async function createSession({
         time,
         maxSlots: maxSlots || 0,
         attendees: "[]",
-        status: "open"
+        status: "open",
+        isPrivate,
+        password: isPrivate && password ? password : null
     });
 }
 

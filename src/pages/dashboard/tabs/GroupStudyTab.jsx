@@ -42,9 +42,10 @@ const emptyForm = {
     location: "",
     date: "",
     time: "",
-    maxSlots: ""
+    maxSlots: "",
+    isPrivate: false,
+    password: ""
 };
-
 // ── Main Tab ─────────────────────────────────────
 
 export default function GroupStudyTab({ department, user, profile }) {
@@ -66,7 +67,9 @@ export default function GroupStudyTab({ department, user, profile }) {
     const [formError, setFormError] = useState("");
     const [actionId, setActionId] = useState(null);
     const [expandedId, setExpandedId] = useState(null);
-
+    const [passwordPrompt, setPasswordPrompt] = useState(null); // { session } | null
+    const [passwordInput, setPasswordInput] = useState("");
+    const [passwordError, setPasswordError] = useState("");
     // ── Chat room state ──────────────────────────
     // null = list view, string = session $id open in chat
     const [chatSessionId, setChatSessionId] = useState(null);
@@ -97,6 +100,10 @@ export default function GroupStudyTab({ department, user, profile }) {
             setFormError("Date and time are required.");
             return;
         }
+        if (form.isPrivate && !form.password.trim()) {
+            setFormError("Please set a password for private sessions.");
+            return;
+        }
         setSaving(true);
         try {
             await create({
@@ -106,7 +113,9 @@ export default function GroupStudyTab({ department, user, profile }) {
                 location: form.location.trim(),
                 date: form.date,
                 time: form.time,
-                maxSlots: parseInt(form.maxSlots) || 0
+                maxSlots: parseInt(form.maxSlots) || 0,
+                isPrivate: form.isPrivate,
+                password: form.isPrivate ? form.password.trim() : null
             });
             setForm(emptyForm);
             setShowForm(false);
@@ -118,6 +127,12 @@ export default function GroupStudyTab({ department, user, profile }) {
     };
 
     const handleJoin = async s => {
+        if (s.isPrivate) {
+            setPasswordPrompt(s);
+            setPasswordInput("");
+            setPasswordError("");
+            return;
+        }
         setActionId(s.$id);
         try {
             await join(s.$id, s.attendees, user);
@@ -125,6 +140,26 @@ export default function GroupStudyTab({ department, user, profile }) {
             setActionId(null);
         }
     };
+
+    const handlePasswordJoin = async () => {
+        if (!passwordPrompt) return;
+        if (
+            passwordInput.trim().toLowerCase() !==
+            passwordPrompt.password?.toLowerCase()
+        ) {
+            setPasswordError("Incorrect password. Try again.");
+            return;
+        }
+        const s = passwordPrompt;
+        setPasswordPrompt(null);
+        setActionId(s.$id);
+        try {
+            await join(s.$id, s.attendees, user);
+        } finally {
+            setActionId(null);
+        }
+    };
+
     const handleLeave = async s => {
         setActionId(s.$id);
         try {
@@ -292,7 +327,75 @@ export default function GroupStudyTab({ department, user, profile }) {
                                 className="input-field w-32"
                             />
                         </div>
+                        {/* Privacy toggle */}
+                        <div className="flex flex-col gap-2">
+                            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                Session access
+                            </label>
+                            <div className="flex gap-2">
+                                {[
+                                    {
+                                        val: false,
+                                        label: "Public",
+                                        icon: "🌐",
+                                        desc: "Anyone in your class can join"
+                                    },
+                                    {
+                                        val: true,
+                                        label: "Private",
+                                        icon: "🔒",
+                                        desc: "Password required to join"
+                                    }
+                                ].map(opt => (
+                                    <button
+                                        key={String(opt.val)}
+                                        type="button"
+                                        onClick={() =>
+                                            setForm(p => ({
+                                                ...p,
+                                                isPrivate: opt.val,
+                                                password: ""
+                                            }))
+                                        }
+                                        className={`flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-xl border-2 text-xs font-semibold transition-all ${
+                                            form.isPrivate === opt.val
+                                                ? "border-primary-700 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400"
+                                                : "border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                        }`}
+                                    >
+                                        <span className="text-base">
+                                            {opt.icon}
+                                        </span>
+                                        {opt.label}
+                                        <span className="text-[10px] font-normal text-slate-400 text-center leading-tight">
+                                            {opt.desc}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
 
+                        {/* Password field — shown only for private */}
+                        {form.isPrivate && (
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                    Session password
+                                </label>
+                                <input
+                                    name="password"
+                                    type="text"
+                                    placeholder="e.g. csc301 or any short code"
+                                    value={form.password}
+                                    onChange={handleChange}
+                                    required={form.isPrivate}
+                                    maxLength={20}
+                                    className="input-field"
+                                />
+                                <p className="text-xs text-slate-400 px-1">
+                                    Share this with students you want to invite
+                                </p>
+                            </div>
+                        )}
                         {formError && (
                             <p className="text-red-500 text-sm flex items-center gap-2">
                                 <AlertCircle size={14} /> {formError}
@@ -492,6 +595,19 @@ function SessionCard({
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                                     JOINED
                                 </span>
+                            )}
+                            {s.isPrivate && !isCancelled && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                                    🔒 Private
+                                </span>
+                            )}
+                            {isOwner && s.isPrivate && s.password && (
+                                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                    <span>Password:</span>
+                                    <span className="font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-lg">
+                                        {s.password}
+                                    </span>
+                                </div>
                             )}
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1027,6 +1143,85 @@ function ChatMessage({
                     <X size={13} />
                 </button>
             )}
+
+            {/* Password prompt modal */}
+            <AnimatePresence>
+                {passwordPrompt && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm"
+                        onClick={e =>
+                            e.target === e.currentTarget &&
+                            setPasswordPrompt(null)
+                        }
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0, y: 12 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.95, opacity: 0, y: 12 }}
+                            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center shrink-0">
+                                    <span className="text-xl">🔒</span>
+                                </div>
+                                <div>
+                                    <p className="font-bold text-sm">
+                                        Private Session
+                                    </p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[200px]">
+                                        {passwordPrompt.title}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                This session is password-protected. Ask the
+                                creator for the access code.
+                            </p>
+
+                            <input
+                                type="text"
+                                placeholder="Enter session password..."
+                                value={passwordInput}
+                                onChange={e => {
+                                    setPasswordInput(e.target.value);
+                                    setPasswordError("");
+                                }}
+                                onKeyDown={e =>
+                                    e.key === "Enter" && handlePasswordJoin()
+                                }
+                                autoFocus
+                                className="input-field"
+                            />
+
+                            {passwordError && (
+                                <p className="text-red-500 text-xs flex items-center gap-1.5">
+                                    <AlertCircle size={13} /> {passwordError}
+                                </p>
+                            )}
+
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setPasswordPrompt(null)}
+                                    className="flex-1 py-2.5 rounded-xl text-sm font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handlePasswordJoin}
+                                    disabled={!passwordInput.trim()}
+                                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-primary-700 hover:bg-primary-600 transition-colors disabled:opacity-50"
+                                >
+                                    Join Session
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

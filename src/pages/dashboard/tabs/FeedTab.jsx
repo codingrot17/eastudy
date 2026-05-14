@@ -107,6 +107,7 @@ export default function FeedTab({ department, user, profile }) {
     const [postError, setPostError] = useState("");
     const [filter, setFilter] = useState("all");
     const [previewFile, setPreviewFile] = useState(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const canPin = profile?.role === "rep" || profile?.role === "assistant";
 
@@ -174,8 +175,18 @@ export default function FeedTab({ department, user, profile }) {
         [pin]
     );
 
-    const filtered =
-        filter === "all" ? posts : posts.filter(p => p.type === filter);
+    const filtered = posts
+        .filter(p => filter === "all" || p.type === filter)
+        .filter(p => {
+            if (!searchQuery.trim()) return true;
+            const q = searchQuery.toLowerCase();
+            return (
+                p.content?.toLowerCase().includes(q) ||
+                p.authorName?.toLowerCase().includes(q) ||
+                p.url?.toLowerCase().includes(q) ||
+                p.fileName?.toLowerCase().includes(q)
+            );
+        });
     const typeConf = POST_TYPES.find(t => t.value === activeType);
 
     return (
@@ -393,6 +404,29 @@ export default function FeedTab({ department, user, profile }) {
                 ))}
             </div>
 
+            {/* Search bar */}
+            <div className="relative">
+                <Search
+                    size={16}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                    type="text"
+                    placeholder="Search posts, questions, resources…"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="input-field pl-10 pr-10"
+                />
+                {searchQuery && (
+                    <button
+                        onClick={() => setSearchQuery("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    >
+                        <X size={14} />
+                    </button>
+                )}
+            </div>
+
             {/* Posts */}
             {loading ? (
                 <div className="flex flex-col gap-3">
@@ -419,20 +453,25 @@ export default function FeedTab({ department, user, profile }) {
                         <Rss size={24} className="text-primary-500" />
                     </div>
                     <p className="font-semibold text-slate-500 dark:text-slate-400">
-                        {filter === "all"
-                            ? "Nothing posted yet"
-                            : `No ${TYPE_LABEL[filter]?.toLowerCase()}s yet`}
+                        {searchQuery
+                            ? `No results for "${searchQuery}"`
+                            : filter === "all"
+                              ? "Nothing posted yet"
+                              : `No ${TYPE_LABEL[filter]?.toLowerCase()}s yet`}
                     </p>
                     <p className="text-sm text-slate-400 max-w-xs">
-                        Be the first — share a resource, ask a question, or drop
-                        an update.
+                        {searchQuery
+                            ? "Try different keywords or clear the search."
+                            : "Be the first — share a resource, ask a question, or drop an update."}
                     </p>
-                    <button
-                        onClick={() => setShowCompose(true)}
-                        className="text-primary-700 dark:text-primary-400 text-sm font-semibold hover:underline mt-1"
-                    >
-                        Post something →
-                    </button>
+                    {!searchQuery && (
+                        <button
+                            onClick={() => setShowCompose(true)}
+                            className="text-primary-700 dark:text-primary-400 text-sm font-semibold hover:underline mt-1"
+                        >
+                            Post something →
+                        </button>
+                    )}
                 </div>
             ) : (
                 <div className="flex flex-col gap-3">
