@@ -21,7 +21,8 @@ import {
     Image,
     Download,
     Eye,
-    File
+    File,
+    Search
 } from "lucide-react";
 import { usePosts, useComments } from "../../../hooks/usePosts";
 import FileUploadButton, {
