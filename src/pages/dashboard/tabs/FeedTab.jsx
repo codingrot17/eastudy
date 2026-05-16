@@ -29,6 +29,7 @@ import FileUploadButton, {
     FileAttachmentChip
 } from "../../../components/ui/FileUploadButton";
 import FilePreviewModal from "../../../components/ui/FilePreviewModal";
+import LinkPreview from "../../../components/ui/LinkPreview";
 import {
     getFileViewUrl,
     getFileDownloadUrl,
@@ -295,6 +296,14 @@ export default function FeedTab({ department, user, profile }) {
                                             className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-600 transition text-sm"
                                         />
                                     )}
+                                    {/* Inline preview while composing */}
+                                    {!attachedFile &&
+                                        url.trim() &&
+                                        url.startsWith("http") && (
+                                            <div className="opacity-80">
+                                                <LinkPreview url={url.trim()} />
+                                            </div>
+                                        )}
                                     {!url.trim() && (
                                         <div className="flex items-center gap-2">
                                             {attachedFile ? (
@@ -541,13 +550,11 @@ const PostCard = memo(function PostCard({
             ? post.content.slice(0, TRUNCATE_AT).trimEnd() + "…"
             : post.content;
 
-    // ── File detection — check BOTH sourceType and fileId ──
-    // sourceType can be "file", but fileId must also exist
-    // Guard against null/undefined/empty string for both
+    // File detection
     const hasFile = post.sourceType === "file" && Boolean(post.fileId);
     const fileType = hasFile ? getFileType(post.mimeType ?? "") : null;
 
-    // ── Link detection — only when no file attached ──
+    // Link detection — only when no file attached, and we have a URL
     const hasLink =
         !hasFile &&
         post.type === "resource" &&
@@ -650,18 +657,8 @@ const PostCard = memo(function PostCard({
                     )}
                 </div>
 
-                {/* Resource URL link */}
-                {hasLink && (
-                    <a
-                        href={post.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400 text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors"
-                    >
-                        <ExternalLink size={14} className="shrink-0" />
-                        <span className="truncate">{post.url}</span>
-                    </a>
-                )}
+                {/* ── Link preview — replaces plain URL chip ── */}
+                {hasLink && <LinkPreview url={post.url} />}
 
                 {/* File attachment */}
                 {hasFile && (
@@ -813,12 +810,10 @@ function FileAttachmentCard({
                         className="w-full max-h-72 object-cover hover:opacity-95 transition-opacity"
                         loading="lazy"
                         onError={e => {
-                            // If image fails to load, show placeholder
                             e.target.style.display = "none";
                             e.target.nextSibling?.classList.remove("hidden");
                         }}
                     />
-                    {/* Fallback if image src fails */}
                     <div className="hidden p-8 flex items-center justify-center">
                         <Image size={32} className="text-slate-300" />
                     </div>
@@ -888,7 +883,6 @@ function FileAttachmentCard({
         );
     }
 
-    // DOC or other
     return (
         <a
             href={downloadUrl}
