@@ -8,6 +8,30 @@ import {
 } from "../../appwrite/department";
 import useAuthStore from "../../store/useAuthStore";
 
+/**
+ * Poll for a valid Appwrite session with exponential backoff.
+ *
+ * OAuth redirects don't guarantee the session cookie is readable
+ * immediately — especially on slow Nigerian mobile connections.
+ * Instead of a hardcoded 1.5s wait, we try up to `attempts` times
+ * with increasing delays: 1.5s → 2.25s → 3.375s (capped at 4s).
+ *
+ * @param {number} attempts  - max retries (default 3)
+ * @param {number} delayMs   - initial delay in ms (default 1500)
+ * @returns {Promise<object|null>} Appwrite user or null
+ */
+async function pollForUser(attempts = 3, delayMs = 1500) {
+    for (let i = 0; i < attempts; i++) {
+        const user = await getCurrentUser();
+        if (user) return user;
+        if (i < attempts - 1) {
+            await new Promise(r => setTimeout(r, delayMs));
+            delayMs = Math.min(delayMs * 1.5, 4000);
+        }
+    }
+    return null;
+}
+
 export default function AuthCallback() {
     const navigate = useNavigate();
     const { setAuth } = useAuthStore();
@@ -18,20 +42,15 @@ export default function AuthCallback() {
 
     useEffect(() => {
         const handle = async () => {
-            // Single 1.5s wait — enough for Android/desktop.
-            // iOS Safari has a cookie sync issue we can't reliably fix,
-            // so we fail fast and show a clear recovery screen.
-            await new Promise(r => setTimeout(r, 1500));
+            // Strict Mode mounts twice in dev — guard against double execution
+            if (handled.current) return;
+            handled.current = true;
 
             try {
                 setStatus("Verifying your account...");
-                let user = await getCurrentUser();
 
-                // One retry after 2s if first attempt returns null
-                if (!user) {
-                    await new Promise(r => setTimeout(r, 2000));
-                    user = await getCurrentUser();
-                }
+                // Poll instead of fixed-wait — handles slow mobile connections
+                const user = await pollForUser();
 
                 if (!user) {
                     navigate("/auth/login?error=session");
@@ -50,6 +69,8 @@ export default function AuthCallback() {
                     return;
                 }
 
+                setStatus("Almost there...");
+
                 let department = null;
                 if (profile.role === "rep") {
                     department = await getDepartmentByRepId(user.$id);
@@ -61,6 +82,7 @@ export default function AuthCallback() {
                     department = await getDepartmentById(profile.departmentId);
                 }
 
+                // setAuth marks isHydrated:true so ProtectedRoute doesn't spin
                 setAuth(user, profile, department);
                 navigate(`/dashboard/${profile.role}`, { replace: true });
             } catch (err) {
@@ -70,7 +92,7 @@ export default function AuthCallback() {
         };
 
         handle();
-    }, [navigate, type, setAuth]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [navigate, type, setAuth]);
 
     return (
         <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-white dark:bg-slate-950">

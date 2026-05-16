@@ -6,17 +6,26 @@ import {
     getDepartmentById
 } from "../appwrite/department";
 
-const useAuthStore = create(set => ({
+const useAuthStore = create((set, get) => ({
     user: null,
     profile: null,
     department: null,
     isLoading: false,
     isHydrated: false,
+    _hydrating: false, // internal guard — prevents concurrent hydration calls
 
     hydrate: async () => {
-        set({ isLoading: true });
+        const { _hydrating, isHydrated } = get();
+
+        // Prevent double-fire from StrictMode or multiple callers.
+        // If already hydrated (e.g. after setAuth from signup flow), skip.
+        if (_hydrating || isHydrated) return;
+
+        set({ isLoading: true, _hydrating: true });
+
         try {
             const user = await getCurrentUser();
+
             if (!user) {
                 set({ user: null, profile: null, department: null });
                 return;
@@ -33,23 +42,44 @@ const useAuthStore = create(set => ({
 
             set({ user, profile, department });
         } catch (err) {
+            // Network failure, Appwrite down, etc. — always resolve so
+            // ProtectedRoute doesn't spin forever. User lands on login.
             console.warn("[AuthStore] Hydration error:", err?.message);
             set({ user: null, profile: null, department: null });
         } finally {
-            set({ isLoading: false, isHydrated: true });
+            // Always mark hydrated, even on error — ProtectedRoute depends on this
+            set({ isLoading: false, isHydrated: true, _hydrating: false });
         }
     },
 
+    // Called after signup/OAuth flows that already have user data in hand.
+    // Sets isHydrated: true so ProtectedRoute never gets stuck on spinner.
     setAuth: (user, profile, department = null) => {
-        set({ user, profile, department });
+        set({
+            user,
+            profile,
+            department,
+            isHydrated: true,
+            isLoading: false,
+            _hydrating: false
+        });
     },
 
     setDepartment: department => {
         set({ department });
     },
 
+    // Reset everything including hydration state so the next login
+    // triggers a fresh hydrate() call rather than being skipped.
     clear: () => {
-        set({ user: null, profile: null, department: null });
+        set({
+            user: null,
+            profile: null,
+            department: null,
+            isHydrated: false,
+            isLoading: false,
+            _hydrating: false
+        });
     }
 }));
 

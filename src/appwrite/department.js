@@ -53,7 +53,7 @@ export const createDepartment = async ({
     const doc = await databases.createDocument(
         DB_ID,
         DEPARTMENTS_ID,
-        ID.unique(),
+        ID.unique(), // always generates a fresh unique ID
         { name, level, session, school, studentCount, repId, code }
     );
     invalidatePrefix("dept:");
@@ -67,23 +67,52 @@ export const createUserProfile = async ({
     role,
     departmentId = null
 }) => {
-    const doc = await databases.createDocument(DB_ID, USERS_ID, ID.unique(), {
-        authId,
-        name,
-        email,
-        role,
-        departmentId
-    });
-    invalidatePrefix(`profile:${authId}`);
-    return doc;
+    // Guard: check if a profile already exists for this authId.
+    // This prevents the "document already exists" crash when signup
+    // is retried (e.g. after a network hiccup or StrictMode double-mount).
+    try {
+        const existing = await databases.listDocuments(DB_ID, USERS_ID, [
+            Query.equal("authId", authId),
+            Query.limit(1)
+        ]);
+        if (existing.total > 0) {
+            // Profile already exists — return it rather than crashing
+            console.warn(
+                "[createUserProfile] Profile already exists for",
+                authId,
+                "— returning existing"
+            );
+            return existing.documents[0];
+        }
+    } catch (err) {
+        // If the check itself fails (permissions, network), log and proceed
+        // to attempt creation — Appwrite will throw a 409 which we handle below
+        console.warn("[createUserProfile] Pre-check failed:", err?.message);
+    }
+
+    try {
+        return await databases.createDocument(
+            DB_ID,
+            USERS_ID,
+            ID.unique(), // always a fresh ID — never reuse authId as document ID
+            { authId, name, email, role, departmentId }
+        );
+    } catch (err) {
+        // 409 = document with this content already exists (race condition)
+        // Fetch and return the existing profile instead of surfacing the error
+        if (err?.code === 409) {
+            const res = await databases.listDocuments(DB_ID, USERS_ID, [
+                Query.equal("authId", authId),
+                Query.limit(1)
+            ]);
+            if (res.total > 0) return res.documents[0];
+        }
+        throw err;
+    }
 };
 
 // ── Reads — these are the hot paths, all cached ─
 
-/**
- * getUserProfile — called on every app load per user.
- * Cache for 5 minutes; invalidated on profile updates.
- */
 export const getUserProfile = async authId => {
     return cachedFetch(
         `profile:${authId}`,
@@ -97,10 +126,6 @@ export const getUserProfile = async authId => {
     );
 };
 
-/**
- * getDepartmentByRepId — called every time a rep loads the app.
- * Cache for 2 minutes; invalidated on department updates.
- */
 export const getDepartmentByRepId = async repId => {
     return cachedFetch(
         `dept:rep:${repId}`,
@@ -110,14 +135,10 @@ export const getDepartmentByRepId = async repId => {
             ]);
             return res.total > 0 ? res.documents[0] : null;
         },
-        120_000 // 2 minutes
+        120_000
     );
 };
 
-/**
- * getDepartmentByCode — called during student signup.
- * Cache for 2 minutes (codes don't change).
- */
 export const getDepartmentByCode = async code => {
     const normalized = code.toUpperCase().trim();
     return cachedFetch(
@@ -132,11 +153,6 @@ export const getDepartmentByCode = async code => {
     );
 };
 
-/**
- * getDepartmentById — called by every student and assistant on load.
- * With 200 students in a department, this would fire 200 times on launch.
- * Cache for 2 minutes + deduplication = ~1 real call per 2 minutes.
- */
 export const getDepartmentById = async id => {
     return cachedFetch(
         `dept:id:${id}`,
@@ -145,7 +161,6 @@ export const getDepartmentById = async id => {
     );
 };
 
-// ── getDepartmentStudents — not cached (list changes as students join) ─
 export const getDepartmentStudents = async departmentId => {
     return cachedFetch(
         `dept:students:${departmentId}`,
@@ -157,7 +172,7 @@ export const getDepartmentStudents = async departmentId => {
             ]);
             return res.documents;
         },
-        60_000 // 1 minute cache
+        60_000
     );
 };
 
@@ -185,12 +200,9 @@ export const assignAssistantRep = async (userAuthId, departmentId) => {
         DB_ID,
         DEPARTMENTS_ID,
         dept.$id,
-        {
-            assistantRepId: userAuthId
-        }
+        { assistantRepId: userAuthId }
     );
 
-    // Bust cache so new role is reflected immediately
     invalidate(`profile:${userAuthId}`);
     invalidate(`dept:id:${departmentId}`);
     return result;

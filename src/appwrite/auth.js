@@ -1,5 +1,4 @@
 import { account } from "./config";
-import { OAuthProvider } from "appwrite";
 
 // ── Email / Password ────────────────────────────
 
@@ -9,11 +8,13 @@ export const createAccount = async (name, email, password) => {
 };
 
 export const loginEmail = async (email, password) => {
+    // Attempt to clear any stale session. A 401 here just means the user
+    // is already a guest (no session) — that's fine, we swallow it and
+    // proceed. Any other error is also non-fatal; we still attempt login.
     try {
-        // Clear any stale session first
         await account.deleteSession("current");
     } catch {
-        // No active session — fine
+        // 401 = guest (no session to delete) — expected, not an error
     }
     return await account.createEmailPasswordSession(email, password);
 };
@@ -35,12 +36,10 @@ function buildOAuthURL(successPath, failurePath) {
 }
 
 export const loginGoogle = () => {
-    // Fully synchronous — Safari allows this from a click handler
     window.location.href = buildOAuthURL("/auth/callback", "/auth/failure");
 };
 
 export const loginGoogleAsStudent = () => {
-    // Fully synchronous — Safari allows this from a click handler
     window.location.href = buildOAuthURL(
         "/auth/callback?type=student",
         "/auth/failure"
