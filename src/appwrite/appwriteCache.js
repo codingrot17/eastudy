@@ -100,3 +100,8 @@ export function invalidatePrefix(prefix) {
 export function getCacheSize() {
     return cache.size;
 }
+
+export function clearAll() {
+    cache.clear();
+    // Don't cancel inflight — just let them complete without caching
+}

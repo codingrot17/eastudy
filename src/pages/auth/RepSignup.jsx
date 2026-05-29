@@ -23,6 +23,7 @@ import {
 import useAuthStore from "../../store/useAuthStore";
 import ThemeToggle from "../../components/ui/ThemeToggle";
 import Button from "../../components/ui/Button";
+import { invalidate } from "../../appwrite/appwriteCache";
 
 const LEVELS = ["100L", "200L", "300L", "400L", "500L", "600L", "700L", "800L"];
 const SESSIONS = ["2023/2024", "2024/2025", "2025/2026", "2026/2027"];
@@ -74,6 +75,7 @@ export default function RepSignup() {
                     navigate("/auth/rep/signup");
                     return;
                 }
+                invalidate(`profile:${user.$id}`);
                 setOauthUser(user);
             } catch {
                 navigate("/auth/rep/signup");

@@ -1,4 +1,5 @@
 import { account } from "./config";
+import { clearAll } from "./appwriteCache";
 
 // ── Email / Password ────────────────────────────
 
@@ -57,5 +58,6 @@ export const getCurrentUser = async () => {
 };
 
 export const logout = async () => {
+    clearAll();
     return await account.deleteSession("current");
 };

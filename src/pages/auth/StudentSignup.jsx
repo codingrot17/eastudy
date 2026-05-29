@@ -22,6 +22,7 @@ import {
 import useAuthStore from "../../store/useAuthStore";
 import ThemeToggle from "../../components/ui/ThemeToggle";
 import Button from "../../components/ui/Button";
+import { invalidate } from "../../appwrite/appwriteCache";
 
 const fadeSlide = {
     hidden: { opacity: 0, x: 40 },
@@ -64,6 +65,7 @@ export default function StudentSignup() {
                     navigate("/auth/student/signup");
                     return;
                 }
+                invalidate(`profile:${user.$id}`);
                 // Check if profile already exists (returning user)
                 const profile = await getUserProfile(user.$id);
                 if (profile) {

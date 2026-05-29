@@ -5,6 +5,7 @@ import {
     getDepartmentByRepId,
     getDepartmentById
 } from "../appwrite/department";
+import { clearAll } from "../appwrite/appwriteCache";
 
 const useAuthStore = create((set, get) => ({
     user: null,
@@ -12,14 +13,14 @@ const useAuthStore = create((set, get) => ({
     department: null,
     isLoading: false,
     isHydrated: false,
-    _hydrating: false, // internal guard — prevents concurrent hydration calls
+    _hydrating: false,
 
     hydrate: async () => {
-        const { _hydrating, isHydrated } = get();
-
-        // Prevent double-fire from StrictMode or multiple callers.
-        // If already hydrated (e.g. after setAuth from signup flow), skip.
-        if (_hydrating || isHydrated) return;
+        const { _hydrating } = get();
+        // Only block concurrent calls — NOT already-hydrated sessions.
+        // After clear() the store resets isHydrated to false, so this
+        // correctly allows re-hydration after logout + new login.
+        if (_hydrating) return;
 
         set({ isLoading: true, _hydrating: true });
 
@@ -42,19 +43,16 @@ const useAuthStore = create((set, get) => ({
 
             set({ user, profile, department });
         } catch (err) {
-            // Network failure, Appwrite down, etc. — always resolve so
-            // ProtectedRoute doesn't spin forever. User lands on login.
             console.warn("[AuthStore] Hydration error:", err?.message);
             set({ user: null, profile: null, department: null });
         } finally {
-            // Always mark hydrated, even on error — ProtectedRoute depends on this
             set({ isLoading: false, isHydrated: true, _hydrating: false });
         }
     },
 
-    // Called after signup/OAuth flows that already have user data in hand.
-    // Sets isHydrated: true so ProtectedRoute never gets stuck on spinner.
     setAuth: (user, profile, department = null) => {
+        // Always do a full state reset before setting new auth.
+        // This prevents stale old-user data bleeding through.
         set({
             user,
             profile,
@@ -65,18 +63,17 @@ const useAuthStore = create((set, get) => ({
         });
     },
 
-    setDepartment: department => {
-        set({ department });
-    },
+    setDepartment: department => set({ department }),
 
-    // Reset everything including hydration state so the next login
-    // triggers a fresh hydrate() call rather than being skipped.
     clear: () => {
+        // Bust Appwrite in-memory cache so next user's hydrate()
+        // fetches fresh data, not the previous user's cached profile.
+        clearAll();
         set({
             user: null,
             profile: null,
             department: null,
-            isHydrated: false,
+            isHydrated: false, // ← allows hydrate() to re-run after new login
             isLoading: false,
             _hydrating: false
         });
